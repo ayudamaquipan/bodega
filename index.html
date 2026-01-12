@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquipan PRO | Sistema Cloud</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root { --bg-body: #f4f7f6; --surface: #ffffff; --primary: #2c3e50; --radius: 10px; --shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        body { background-color: var(--bg-body); font-family: 'Poppins', sans-serif; color: #333; padding-bottom: 60px; }
+        
+        /* LOGIN */
+        .login-wrapper { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: white; padding: 2.5rem; border-radius: 20px; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center; }
+        .hidden { display: none !important; }
+
+        /* NAVBAR */
+        .navbar-custom { background: var(--surface); box-shadow: var(--shadow); padding: 0.8rem 0; position: sticky; top: 0; z-index: 1000; }
+        
+        /* KPI & CARDS */
+        .kpi-container { display: flex; gap: 15px; margin-bottom: 30px; flex-wrap: wrap; }
+        .kpi-pill { background: var(--surface); padding: 10px 20px; border-radius: 50px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px; flex: 1; min-width: 150px; }
+        .kpi-number { font-weight: 700; font-size: 1.2rem; } .kpi-label { font-size: 0.85rem; color: #666; text-transform: uppercase; }
+
+        /* LISTA SERVICIOS */
+        .service-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 15px; display: flex; align-items: stretch; overflow: hidden; border: 1px solid rgba(0,0,0,0.03); transition: transform 0.2s ease; }
+        .status-strip { width: 6px; flex-shrink: 0; }
+        .strip-pendiente { background-color: #f59e0b; } .strip-proceso { background-color: #3b82f6; } .strip-espera { background-color: #ef4444; } .strip-terminado { background-color: #10b981; }
+        .service-content { padding: 20px; flex-grow: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }
+        .col-id { flex-basis: 140px; } .col-main { flex: 2; min-width: 250px; } .col-items { flex: 2; min-width: 200px; padding-left: 20px; border-left: 1px solid #eee; } .col-actions { flex-basis: 180px; text-align: right; }
+
+        .status-badge { font-size: 0.75rem; padding: 5px 12px; border-radius: 20px; font-weight: 600; text-transform: uppercase; display: inline-flex; align-items: center; gap: 6px; }
+        .bg-st-pendiente { background: #fffbeb; color: #b45309; } .bg-st-proceso { background: #eff6ff; color: #1d4ed8; } .bg-st-espera { background: #fef2f2; color: #b91c1c; } .bg-st-terminado { background: #f0fdf4; color: #15803d; }
+        
+        /* BOTONES */
+        .btn-icon { width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: none; cursor:pointer; transition:0.2s; }
+        .btn-icon:hover { transform: scale(1.1); }
+        .btn-play { background: #3b82f6; color: white; } .btn-check { background: #10b981; color: white; } .btn-warn { background: #f59e0b; color: white; } .btn-del { background: #fee2e2; color: #ef4444; } .btn-view { background: #f1f5f9; color: #475569; }
+
+        /* NOTIFICACIONES */
+        .nav-icon-btn { position: relative; background: #f1f5f9; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; color: #64748b; }
+        .notification-badge { position: absolute; top: -2px; right: -2px; background: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; opacity: 0; }
+        .notification-badge.active { opacity: 1; }
+        .bell-shake { animation: shake 0.5s infinite; color: #ef4444; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-2px)} 75%{transform:translateX(2px)} }
+
+        .toast-container { position: fixed; top: 90px; right: 20px; z-index: 9999; }
+        .custom-toast { background: #333; color: #fff; padding: 12px 20px; border-radius: 8px; margin-bottom: 10px; opacity: 0; transform: translateX(20px); transition: all 0.3s; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .custom-toast.show { opacity: 1; transform: translateX(0); }
+        
+        .date-display { font-size: 0.75rem; color: #64748b; font-weight: 500; }
+        .time-display { font-size: 0.7rem; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+<div id="loginScreen" class="login-wrapper">
+    <div class="login-card">
+        <h3 class="fw-bold mb-4">MAQUIPAN</h3>
+        <form id="loginForm" onsubmit="app.login(event)">
+            <div class="form-floating mb-3"><input type="text" class="form-control" id="uUser" placeholder="User" required><label>Usuario</label></div>
+            <div class="form-floating mb-4"><input type="password" class="form-control" id="uPass" placeholder="Pass" required><label>Contraseña</label></div>
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">INGRESAR</button>
+            <p id="loginError" class="text-danger small mt-3 hidden">Usuario o clave incorrectos</p>
+        </form>
+    </div>
+</div>
+
+<div id="mainApp" class="hidden">
+    <div class="toast-container" id="toastContainer"></div>
+
+    <nav class="navbar-custom mb-4">
+        <div class="container d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-cloud text-primary me-2"></i>MAQUIPAN <span class="text-muted fw-light">| Cloud</span></h5>
+            <div class="d-flex align-items-center gap-3">
+                <button class="nav-icon-btn" id="bellBtn" onclick="app.filterByWarning()"><i class="fas fa-bell"></i><div class="notification-badge" id="notifBadge">0</div></button>
+                <div class="d-flex align-items-center bg-light rounded-pill px-3 py-1 border gap-2">
+                    <span id="userDisplay" class="fw-bold small text-dark">Usuario</span>
+                    <div style="width:1px; height:15px; background:#ccc;"></div>
+                    <a href="#" onclick="app.logout()" class="text-danger small fw-bold text-decoration-none">Salir</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="kpi-container">
+            <div class="kpi-pill" style="border-left: 4px solid #f59e0b;"><div class="kpi-number text-warning" id="kpi-pending">0</div><div class="kpi-label">Pendientes</div></div>
+            <div class="kpi-pill" style="border-left: 4px solid #3b82f6;"><div class="kpi-number text-primary" id="kpi-process">0</div><div class="kpi-label">En Taller</div></div>
+            <div class="kpi-pill" style="border-left: 4px solid #ef4444;"><div class="kpi-number text-danger" id="kpi-waiting">0</div><div class="kpi-label">Dudas</div></div>
+            <div class="kpi-pill" style="border-left: 4px solid #10b981;"><div class="kpi-number text-success" id="kpi-done">0</div><div class="kpi-label">Listos</div></div>
+        </div>
+
+        <div id="view-bodega" class="role-view hidden mb-4">
+            <div class="card border-0 shadow-sm p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="text-primary fw-bold"><i class="fas fa-plus-circle me-2"></i>Nueva Solicitud</h5>
+                    <small class="text-muted" id="catalogStatus">Cargando catálogo...</small>
+                </div>
+                
+                <form id="formSolicitud">
+                    <div class="row g-3">
+                        <div class="col-md-4"><input type="text" class="form-control" id="local" required placeholder="Cliente / Local"></div>
+                        <div class="col-md-4"><input type="text" class="form-control" id="notaVenta" required placeholder="Nota de Venta #"></div>
+                        <div class="col-md-4"><label class="small text-muted">Fecha Requerida</label><input type="date" class="form-control" id="fechaReq"></div>
+                    </div>
+                    
+                    <datalist id="catalogOptions"></datalist>
+
+                    <div class="mt-3 p-3 bg-light rounded border border-dashed">
+                        <div id="itemsContainer"></div>
+                        <button type="button" class="btn btn-sm btn-link text-decoration-none" onclick="app.addItemRow()">+ Agregar Producto</button>
+                    </div>
+                    <div class="mt-3"><textarea class="form-control" id="observaciones" rows="1" placeholder="Observaciones..."></textarea></div>
+                    <div class="mt-3 text-end"><button type="submit" class="btn btn-primary px-4">Generar Solicitud</button></div>
+                </form>
+            </div>
+        </div>
+
+        <div id="view-admin-tools" class="role-view hidden mb-4">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card p-3 h-100 border-0 shadow-sm">
+                        <h6>📂 Migrar Historial (JSON)</h6>
+                        <div class="d-flex gap-2">
+                            <input type="file" id="jsonReqInput" class="d-none" accept=".json" onchange="app.importRequests()">
+                            <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('jsonReqInput').click()">Cargar Solicitudes</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card p-3 h-100 border-0 shadow-sm border-start border-4 border-success">
+                        <h6>📦 Cargar Catálogo (JSON)</h6>
+                        <div class="d-flex gap-2">
+                            <input type="file" id="jsonProdInput" class="d-none" accept=".json" onchange="app.importProducts()">
+                            <button class="btn btn-success btn-sm" onclick="document.getElementById('jsonProdInput').click()">Cargar Inventario</button>
+                            <span id="prodCountBadge" class="badge bg-light text-dark border align-self-center">0 items</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0 fw-bold text-secondary">Listado en Vivo</h5>
+            <div class="d-flex gap-2">
+                <input type="text" id="searchInput" class="form-control form-control-sm border-0 shadow-sm" placeholder="Buscar..." style="width: 200px;" onkeyup="app.renderList()">
+                <select id="statusFilter" class="form-select form-select-sm border-0 shadow-sm" style="width: 150px;" onchange="app.renderList()">
+                    <option value="">Todo</option>
+                    <option value="bodega">Pendiente</option>
+                    <option value="fabricación">En Taller</option>
+                    <option value="espera">Con Dudas</option>
+                    <option value="terminado">Listo</option>
+                </select>
+            </div>
+        </div>
+        <div id="servicesList">
+            <div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p>Conectando...</p></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="detailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content border-0 shadow"><div class="modal-header border-0 pb-0"><h5 class="modal-title fw-bold text-primary">Detalle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-4" id="modalBodyContent"></div></div></div></div>
+
+<div class="modal fade" id="startModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Iniciar Fabricación</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="mb-3"><label class="form-label fw-bold">Fecha Estimada Entrega</label><input type="date" class="form-control" id="startEstDate"></div>
+        <div class="mb-3"><label class="form-label fw-bold">Comentario Inicial</label><textarea class="form-control" id="startComment" rows="2"></textarea></div>
+        <input type="hidden" id="startIdTarget">
+        <button type="button" class="btn btn-primary w-100" onclick="app.confirmStartProduction()">CONFIRMAR INICIO</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    // --- PEGA AQUI TU CONFIGURACION EXACTA DE FIREBASE ---
+    // (Asegúrate de copiar todo lo que está entre llaves desde Firebase Console)
+const firebaseConfig = {
+  apiKey: "AIzaSyAtui_Q94kUHOB19KdRe-kFqbmiHF-s5vQ",
+  authDomain: "bodega-d26a1.firebaseapp.com",
+  databaseURL: "https://bodega-d26a1-default-rtdb.firebaseio.com",
+  projectId: "bodega-d26a1",
+  storageBucket: "bodega-d26a1.firebasestorage.app",
+  messagingSenderId: "13155139668",
+  appId: "1:13155139668:web:e0764611b5fc298470adc1"
+};
+
+    let db;
+    try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+    } catch (e) { console.error("Error Firebase", e); }
+
+    const USERS = {
+        'bodega': { pass: 'maquipan', role: 'bodega', name: 'Bodega Central' },
+        'planta': { pass: 'maquipan', role: 'fabricacion', name: 'Jefe Planta' },
+        'admin':  { pass: 'admin123', role: 'admin', name: 'Administrador' }
+    };
+
+    const app = {
+        data: {}, products: {}, currentUser: null,
+        beepSound: new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"),
+
+        init: function() {
+            const savedUser = sessionStorage.getItem('maquipan_user');
+            if(savedUser && USERS[savedUser]) this.setCurrentUser(savedUser);
+            if(db) {
+                db.ref('solicitudes').on('value', (snap) => {
+                    this.data = snap.val() || {};
+                    if(this.currentUser) { this.renderList(); this.updateStats(); this.checkForAlerts(); }
+                });
+                db.ref('inventario').on('value', (snap) => {
+                    this.products = snap.val() || {};
+                    this.renderCatalog();
+                });
+            }
+            this.addItemRow();
+        },
+
+        // Auth
+        login: function(e) {
+            e.preventDefault();
+            const u = document.getElementById('uUser').value.toLowerCase().trim();
+            const p = document.getElementById('uPass').value.trim();
+            if (USERS[u] && USERS[u].pass === p) {
+                sessionStorage.setItem('maquipan_user', u);
+                this.setCurrentUser(u);
+            } else document.getElementById('loginError').classList.remove('hidden');
+        },
+        logout: function() {
+            sessionStorage.removeItem('maquipan_user');
+            this.currentUser = null;
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginForm').reset();
+        },
+        setCurrentUser: function(u) {
+            this.currentUser = USERS[u];
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('userDisplay').innerText = this.currentUser.name;
+            document.querySelectorAll('.role-view').forEach(el => el.classList.add('hidden'));
+            if (this.currentUser.role === 'bodega') document.getElementById('view-bodega').classList.remove('hidden');
+            if (this.currentUser.role === 'admin') document.getElementById('view-admin-tools').classList.remove('hidden');
+            this.renderList();
+        },
+
+        // Logic
+        renderCatalog: function() {
+            const dl = document.getElementById('catalogOptions'); dl.innerHTML = '';
+            const list = Object.values(this.products);
+            document.getElementById('catalogStatus').innerText = `${list.length} productos`;
+            if(document.getElementById('prodCountBadge')) document.getElementById('prodCountBadge').innerText = `${list.length} items`;
+            list.forEach(p => { const o = document.createElement('option'); o.value = p.nombre; o.innerText = `SKU: ${p.sku}`; dl.appendChild(o); });
+        },
+        importProducts: function() {
+            const file = document.getElementById('jsonProdInput').files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    let updates = {}; let c=0;
+                    const items = Array.isArray(json) ? json : Object.values(json);
+                    items.forEach(p => { if(p.nombre) { const key = p.sku || Date.now()+Math.random().toString().slice(2,5); updates[key] = {sku:p.sku||"S/N", nombre:p.nombre.toUpperCase()}; c++; }});
+                    db.ref('inventario').update(updates).then(()=>this.showToast(`Cargados ${c} productos`));
+                } catch(err) { alert("Error JSON"); }
+            };
+            reader.readAsText(file);
+        },
+        addItemRow: function() {
+            const id = Date.now();
+            const div = document.createElement('div'); div.className = 'd-flex gap-2 mb-2 item-row'; div.id = `r-${id}`;
+            div.innerHTML = `<input type="text" class="form-control form-control-sm item-desc" placeholder="Buscar..." list="catalogOptions" style="flex:2"><input type="text" class="form-control form-control-sm item-sku" placeholder="SKU" style="flex:1"><input type="number" class="form-control form-control-sm item-qty" value="1" style="width:60px"><button type="button" class="btn btn-sm text-danger" onclick="document.getElementById('r-${id}').remove()">×</button>`;
+            document.getElementById('itemsContainer').appendChild(div);
+            const inputDesc = div.querySelector('.item-desc');
+            const inputSku = div.querySelector('.item-sku');
+            inputDesc.addEventListener('change', (e) => {
+                const found = Object.values(this.products).find(p => p.nombre === e.target.value);
+                if(found) inputSku.value = found.sku;
+            });
+        },
+        handleSubmit: function(e) {
+            e.preventDefault();
+            const items = [];
+            document.querySelectorAll('.item-row').forEach(r => {
+                const desc = r.querySelector('.item-desc').value;
+                if(desc) items.push({ producto: desc, sku: r.querySelector('.item-sku').value, cantidad: r.querySelector('.item-qty').value });
+            });
+            if(!items.length) return alert("Faltan items");
+            const id = Date.now().toString();
+            const fechaFull = new Date().toISOString(); 
+            db.ref('solicitudes/'+id).update({
+                id: id, fechaSolicitud: fechaFull, fechaReq: document.getElementById('fechaReq').value,
+                local: document.getElementById('local').value.toUpperCase(), notaVenta: document.getElementById('notaVenta').value,
+                items: items, observaciones: document.getElementById('observaciones').value,
+                estado: "Solicitud enviada por bodega", historial: [{fecha: fechaFull, estado: "Creado", usuario: this.currentUser.name}]
+            }).then(() => { e.target.reset(); document.getElementById('itemsContainer').innerHTML=''; this.addItemRow(); this.showToast("Enviado"); });
+        },
+        updateStatus: function(id, status, obs = "") {
+            if(!this.data[id]) return;
+            if(obs) obs = `[${this.currentUser.name}] ${obs}`;
+            const hist = this.data[id].historial || [];
+            hist.push({fecha: new Date().toISOString(), estado: status, usuario: this.currentUser.name});
+            const oldObs = (this.data[id].observaciones || "") + (obs ? "\n" + obs : "");
+            db.ref('solicitudes/'+id).update({ estado: status, observaciones: oldObs, historial: hist });
+        },
+        openStartModal: function(id) {
+            document.getElementById('startIdTarget').value = id; document.getElementById('startEstDate').value = ''; document.getElementById('startComment').value = '';
+            new bootstrap.Modal(document.getElementById('startModal')).show();
+        },
+        confirmStartProduction: function() {
+            const id = document.getElementById('startIdTarget').value;
+            const estDate = document.getElementById('startEstDate').value;
+            const comment = document.getElementById('startComment').value;
+            let obsText = ""; if(comment) obsText = `Inicio Fabricación: ${comment}`; if(estDate) obsText += ` (Entrega estimada: ${estDate})`;
+            this.updateStatus(id, 'En fabricación', obsText);
+            if(estDate) db.ref('solicitudes/'+id).update({ fechaEntregaEstimada: estDate });
+            bootstrap.Modal.getInstance(document.getElementById('startModal')).hide();
+        },
+        deleteCloud: function(id) { if(confirm("¿Eliminar?")) db.ref('solicitudes/'+id).remove(); },
+        importRequests: function() { 
+            const file = document.getElementById('jsonReqInput').files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    let updates = {}; let c=0;
+                    Object.keys(json).forEach(k => { const item = json[k]; if(typeof item === 'object' && item.cliente) { const id = item.id || k; item.id = id; if(!item.estado) item.estado = "Solicitud enviada por bodega"; updates[id] = item; c++; }});
+                    db.ref('solicitudes').update(updates).then(() => this.showToast(`Migradas ${c} solicitudes`));
+                } catch(err) { alert("Error JSON"); }
+            };
+            reader.readAsText(file);
+        },
+        
+        // Helpers
+        showToast: function(msg, type='success') {
+            const el = document.createElement('div'); el.className = 'custom-toast'; el.innerHTML = `<i class="fas ${type==='success'?'fa-check':'fa-bell text-warning'}"></i> <span>${msg}</span>`;
+            document.getElementById('toastContainer').appendChild(el);
+            setTimeout(()=>el.classList.add('show'),10); setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),300)},3500);
+        },
+        checkForAlerts: function() {
+            if(!this.currentUser || this.currentUser.role !== 'bodega') { document.getElementById('notifBadge').classList.remove('active'); document.getElementById('bellBtn').classList.remove('bell-shake'); return; }
+            const list = Object.values(this.data || {});
+            const w = list.filter(i => i.estado && i.estado.includes('espera')).length;
+            const b = document.getElementById('notifBadge'); b.innerText = w;
+            if(w>0) { b.classList.add('active'); document.getElementById('bellBtn').classList.add('bell-shake'); try{this.beepSound.play().catch(()=>{})}catch(e){} this.showToast(`${w} alertas`, 'warning'); }
+            else { b.classList.remove('active'); document.getElementById('bellBtn').classList.remove('bell-shake'); }
+        },
+        updateStats: function() {
+            const l = Object.values(this.data||{});
+            const c = (t) => l.filter(i=>(i.estado||"").toLowerCase().includes(t)).length;
+            document.getElementById('kpi-pending').innerText = c('bodega')+c('pendiente');
+            document.getElementById('kpi-process').innerText = c('fabricación')+c('proceso');
+            document.getElementById('kpi-waiting').innerText = c('espera')+c('duda');
+            document.getElementById('kpi-done').innerText = c('entregado')+c('terminado');
+        },
+        formatDate: function(isoString) {
+            if(!isoString) return "--";
+            const d = new Date(isoString);
+            if(isNaN(d.getTime())) return isoString; 
+            return d.toLocaleDateString('es-CL') + ' ' + d.toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'});
+        },
+        askInfo: function(id){ const q = prompt("¿Duda?"); if(q) this.updateStatus(id, "En espera de información", `CONSULTA: ${q}`); },
+        replyInfo: function(id){ const a = prompt("Respuesta:"); if(a) { this.updateStatus(id, "Solicitud enviada por bodega", `RESPUESTA: ${a}`); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide(); }},
+        filterByWarning: function(){ document.getElementById('statusFilter').value='espera'; this.renderList(); },
+        viewDetails: function(id) {
+            const item = this.data[id];
+            let rows=""; item.items.forEach(i=>rows+=`<tr class="border-bottom"><td>${i.producto}</td><td>${i.sku||'-'}</td><td class="fw-bold">${i.cantidad}</td></tr>`);
+            let replyBtn = (this.currentUser.role==='bodega' && item.estado.includes('espera')) ? `<button class="btn btn-warning w-100 mt-3" onclick="app.replyInfo('${id}')">Responder Solicitud</button>` : '';
+            document.getElementById('modalBodyContent').innerHTML=`
+                <div class="row mb-3"><div class="col-6"><h4 class="mb-0">${item.local}</h4><small class="text-muted">Cliente</small></div><div class="col-6 text-end"><h4 class="mb-0 text-primary">#${item.notaVenta}</h4><small class="text-muted">Nota Venta</small></div></div>
+                <div class="bg-light p-3 rounded mb-3"><div class="d-flex justify-content-between mb-2"><small>Creado: ${this.formatDate(item.fechaSolicitud)}</small><small>Requerido: ${item.fechaReq||'N/A'}</small></div><span class="badge bg-dark">${item.estado}</span></div>
+                <table class="table table-borderless table-sm mb-3"><thead><tr class=\"text-muted small\"><th>ITEM</th><th>SKU</th><th>CANT</th></tr></thead><tbody>${rows}</tbody></table>
+                <div class="p-3 bg-light rounded small" style="white-space:pre-wrap; max-height:200px; overflow-y:auto">${item.observaciones||'Sin observaciones'}</div>${replyBtn}`;
+            new bootstrap.Modal(document.getElementById('detailModal')).show();
+        },
+        renderList: function() {
+            const container = document.getElementById('servicesList'); if(!this.data) return;
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filter = document.getElementById('statusFilter').value.toLowerCase();
+            container.innerHTML = '';
+            let list = Object.values(this.data).sort((a,b) => (b.id||0) - (a.id||0));
+            list = list.filter(i => { const txt = `${i.local} ${i.notaVenta} ${i.estado}`.toLowerCase(); return txt.includes(search) && (!filter || i.estado.toLowerCase().includes(filter)); });
+            if(!list.length) return container.innerHTML = '<div class="text-center py-5 text-muted">Sin datos</div>';
+            list.forEach(item => {
+                let strip='strip-pendiente', badge='bg-st-pendiente', icon='<i class="far fa-clock"></i>';
+                const s = (item.estado||"").toLowerCase();
+                if(s.includes('fabricación')) { strip='strip-proceso'; badge='bg-st-proceso'; icon='<i class="fas fa-hammer"></i>'; }
+                if(s.includes('espera')) { strip='strip-espera'; badge='bg-st-espera'; icon='<i class="fas fa-exclamation-triangle"></i>'; }
+                if(s.includes('terminado')||s.includes('entregado')) { strip='strip-terminado'; badge='bg-st-terminado'; icon='<i class="fas fa-check"></i>'; }
+                let btns = `<button class="btn-icon btn-view" onclick="app.viewDetails('${item.id}')"><i class="fas fa-eye"></i></button>`;
+                if(this.currentUser.role === 'fabricacion') {
+                    if(s.includes('bodega')||s.includes('pendiente')) btns += `<button class="btn-icon btn-play ms-1" onclick="app.openStartModal('${item.id}')" title="Iniciar Trabajo"><i class="fas fa-play"></i></button> <button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')"><i class="fas fa-question"></i></button>`;
+                    else if(s.includes('fabricación')) btns += `<button class="btn-icon btn-check ms-1" onclick="app.updateStatus('${item.id}','Entregado')"><i class="fas fa-check"></i></button> <button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')"><i class="fas fa-question"></i></button>`;
+                } else if (this.currentUser.role === 'bodega' && s.includes('espera')) btns += `<button class="btn-icon btn-warn ms-1" onclick="app.viewDetails('${item.id}')"><i class="fas fa-reply"></i></button>`;
+                else if (this.currentUser.role === 'admin') btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
+                let itemsHtml = item.items && item.items.length ? `<div class="svc-item-list"><span class="badge bg-dark rounded-pill">${item.items[0].cantidad}</span> ${item.items[0].producto}</div>` : '';
+                if(item.items && item.items.length > 1) itemsHtml += `<small class="text-muted">+${item.items.length-1} más...</small>`;
+                let entregaHtml = item.fechaEntregaEstimada ? `<div class="text-primary small mt-1"><i class="fas fa-shipping-fast"></i> Entrega: ${item.fechaEntregaEstimada}</div>` : '';
+                container.innerHTML += `<div class="service-card"><div class="status-strip ${strip}"></div><div class="service-content"><div class="col-id"><div class="date-display">${this.formatDate(item.fechaSolicitud).split(' ')[0]}</div><div class="time-display">${this.formatDate(item.fechaSolicitud).split(' ')[1] || ''}</div><span class="badge bg-light text-dark border mt-1">NV-${item.notaVenta}</span></div><div class="col-main"><div class="fw-bold">${item.local}</div><div class="text-muted small">Req: ${item.fechaReq||'--'}</div>${entregaHtml}</div><div class="col-items">${itemsHtml}</div><div class="col-actions"><span class="status-badge ${badge}">${icon} ${item.estado}</span><div class="mt-2">${btns}</div></div></div></div>`;
+            });
+        }
+    };
+    document.addEventListener('DOMContentLoaded', () => app.init());
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
