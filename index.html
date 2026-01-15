@@ -365,13 +365,14 @@
     let db;
     try { firebase.initializeApp(firebaseConfig); db = firebase.database(); } catch (e) { console.error("Error Firebase", e); }
 
-    const USERS = {
+	const USERS = {
         'bodega': { pass: 'maquipan', role: 'bodega', name: 'Bodega Central' },
         'planta': { pass: 'maquipan', role: 'fabricacion', name: 'Jefe Planta' },
         'admin':  { pass: 'admin123', role: 'admin', name: 'Administrador' },
-        'visor':  { pass: 'maquipan', role: 'visor', name: 'Visor Gerencia' }
+        'visor':  { pass: 'maquipan', role: 'visor', name: 'Visor Gerencia' },
+        // AGREGAMOS ESTA LÍNEA NUEVA:
+        'operaciones': { pass: 'maquipan', role: 'operaciones', name: 'Operaciones' }
     };
-
     const app = {
         data: {}, products: {}, currentUser: null, charts: {},
         beepSound: new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"),
@@ -416,7 +417,9 @@
             document.getElementById('mainApp').classList.remove('hidden');
             document.getElementById('userDisplay').innerText = this.currentUser.name;
             document.querySelectorAll('.role-view').forEach(el => el.classList.add('hidden'));
-            if (this.currentUser.role === 'bodega') document.getElementById('view-bodega').classList.remove('hidden');
+if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones') {
+    document.getElementById('view-bodega').classList.remove('hidden');
+}
             if (this.currentUser.role === 'admin') document.getElementById('view-admin-tools').classList.remove('hidden');
             this.renderList();
         },
@@ -464,14 +467,23 @@
             const historial = editId ? (this.data[editId].historial || []) : [{fecha: fechaFull, estado: "Creado", usuario: this.currentUser.name}];
             if(editId) historial.push({fecha: fechaFull, estado: "Editado", usuario: this.currentUser.name});
 
+            // 1. DETECTAMOS QUIÉN LO CREA PARA PONER EL NOMBRE CORRECTO
+            let estadoInicial = "Solicitud enviada por bodega";
+            if (this.currentUser.role === 'operaciones') {
+                estadoInicial = "Solicitud de Operaciones";
+            }
+
             db.ref('solicitudes/'+id).update({
                 id: id, folio: folio, fechaSolicitud: editId ? this.data[editId].fechaSolicitud : fechaFull, 
                 fechaReq: document.getElementById('fechaReq').value,
                 local: document.getElementById('local').value.toUpperCase(), notaVenta: document.getElementById('notaVenta').value,
                 items: items, observaciones: document.getElementById('observaciones').value, prioridad: prioridad,
-                estado: editId ? this.data[editId].estado : "Solicitud enviada por bodega", 
+                
+                // 2. USAMOS ESA VARIABLE AQUÍ ABAJO
+                estado: editId ? this.data[editId].estado : estadoInicial, 
+                
                 historial: historial
-            }).then(() => { 
+                      }).then(() => { 
                 this.cancelEdit(); 
                 this.showToast(editId ? "Solicitud Actualizada" : "Solicitud Enviada: " + folio); 
             }).catch(err => alert("Error: " + err.message));
@@ -536,8 +548,15 @@
             if(confirm("¿Restaurar solicitud?")) {
                 const hist = this.data[id].historial || [];
                 hist.push({fecha: new Date().toISOString(), estado: "RESTAURADO", usuario: this.currentUser.name});
-                db.ref('solicitudes/'+id).update({ deleted: false, historial: hist });
+db.ref('solicitudes/'+id).update({ deleted: false, historial: hist });
                 this.showToast("Solicitud Restaurada");
+            }
+        },
+hardDelete: function(id) {
+            if(confirm("⚠️ ¡PELIGRO!\n\nEstás a punto de borrar esta solicitud PERMANENTEMENTE de la base de datos.\nEsta acción NO se puede deshacer.\n\n¿Estás seguro de eliminarla?")) {
+                db.ref('solicitudes/'+id).remove()
+                .then(() => this.showToast("Registro eliminado definitivamente de la BD"))
+                .catch(err => alert("Error: " + err.message));
             }
         },
         // --- ANALYTICS ---
@@ -729,13 +748,52 @@ updateCharts: function() {
             document.getElementById('toastContainer').appendChild(el);
             setTimeout(()=>el.classList.add('show'),10); setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),300)},3500);
         },
-        checkForAlerts: function() {
-            if(!this.currentUser || this.currentUser.role !== 'bodega') { document.getElementById('notifBadge').classList.remove('active'); document.getElementById('bellBtn').classList.remove('bell-shake'); return; }
+checkForAlerts: function() {
+            // 1. Limpieza inicial
+            const badge = document.getElementById('notifBadge');
+            const bell = document.getElementById('bellBtn');
+            badge.classList.remove('active');
+            bell.classList.remove('bell-shake');
+            badge.innerText = "0";
+
+            // 2. Filtro de Roles permitidos
+            if(!this.currentUser) return;
+            const rol = this.currentUser.role;
+            if(rol !== 'bodega' && rol !== 'operaciones') return;
+
             const list = Object.values(this.data || {});
-            const w = list.filter(i => i.estado && i.estado.includes('espera')).length;
-            const b = document.getElementById('notifBadge'); b.innerText = w;
-            if(w>0) { b.classList.add('active'); document.getElementById('bellBtn').classList.add('bell-shake'); try{this.beepSound.play().catch(()=>{})}catch(e){} this.showToast(`${w} alertas`, 'warning'); }
-            else { b.classList.remove('active'); document.getElementById('bellBtn').classList.remove('bell-shake'); }
+            
+            // 3. Conteo de Alertas PROPIAS
+            const alertas = list.filter(i => {
+                // A. Debe ser una duda (estado 'espera')
+                if (!i.estado || !i.estado.includes('espera')) return false;
+
+                // B. Identificar al creador
+                const creador = (i.historial && i.historial[0]) ? i.historial[0].usuario : "";
+
+                // C. Coincidencia estricta:
+if (rol === 'operaciones') {
+                    // Operaciones es estricto: Solo lo suyo
+                    return creador.includes('Operaciones');
+                } 
+                
+                if (rol === 'bodega') {
+                    // Bodega recibe alertas de TODO, MENOS de Operaciones
+                    // Así ve alertas de solicitudes antiguas o importadas por Admin
+                    return !creador.includes('Operaciones');
+                }
+                
+                return false;
+            }).length;
+
+            // 4. Mostrar alerta
+            badge.innerText = alertas;
+            if(alertas > 0) { 
+                badge.classList.add('active'); 
+                bell.classList.add('bell-shake'); 
+                try{this.beepSound.play().catch(()=>{})}catch(e){} 
+                this.showToast(`Tienes ${alertas} dudas pendientes`, 'warning'); 
+            }
         },
         
         // --- KPI ANIMATION ---
@@ -888,7 +946,27 @@ renderList: function() {
             let list = Object.values(this.data).sort((a,b) => (b.id||0) - (a.id||0));
             
             // --- LÓGICA DE FILTRADO CORREGIDA ---
-            list = list.filter(i => {
+list = list.filter(i => {
+                // --- INICIO: LÓGICA DE PRIVACIDAD TOTAL ---
+                
+                // 1. Identificar quién creó la solicitud (Dueño)
+                // Usamos validación segura por si el historial viene vacío
+                const creador = (i.historial && i.historial.length > 0) ? i.historial[0].usuario : "Desconocido";
+
+                // 2. Si soy OPERACIONES: Solo veo lo que diga "Operaciones"
+                if(this.currentUser.role === 'operaciones') {
+                    if(!creador.includes('Operaciones')) return false;
+                }
+
+                // 3. Si soy BODEGA: Solo veo lo que diga "Bodega"
+                // (Esto oculta las solicitudes de Operaciones y de Admin)
+if(this.currentUser.role === 'bodega') {
+                    // En vez de decir "Solo muestra Bodega", decimos:
+                    // "Si es de Operaciones, OCÚLTALO. El resto (Admin, Antiguos, Masivos), MUÉSTRALO."
+                    if(creador.includes('Operaciones')) return false;
+                }                
+                // --- FIN LÓGICA DE PRIVACIDAD ---
+
                 const s = (i.estado || "").toLowerCase(); // Estado en minúsculas
                 
                 // 1. Filtro Papelera
@@ -961,27 +1039,57 @@ renderList: function() {
                 // BOTONES DE ACCIÓN
                 let btns = `<button class="btn-icon btn-view" onclick="app.viewDetails('${item.id}')"><i class="fas fa-eye"></i></button>`;
                 
-                if(item.deleted) {
-                    if(this.currentUser.role === 'admin' || this.currentUser.role === 'bodega') {
+// --- INICIO LÓGICA DE BOTONES (CORREGIDA) ---
+                
+                // 1. CASO: PAPELERA (Item Eliminado)
+                if (item.deleted) {
+                    // Si es ADMIN: Ve Restaurar y ELIMINAR DEFINITIVO
+                    if (this.currentUser.role === 'admin') {
+                        btns += `<button class="btn-icon btn-check ms-1" onclick="app.restoreItem('${item.id}')" title="Restaurar"><i class="fas fa-trash-restore"></i></button>`;
+                        btns += `<button class="btn-icon ms-1" style="background:#7f1d1d; color:white" onclick="app.hardDelete('${item.id}')" title="ELIMINAR DEFINITIVAMENTE DE BD"><i class="fas fa-skull-crossbones"></i></button>`;
+                    } 
+                    // Si es BODEGA: Solo ve Restaurar
+                    else if (this.currentUser.role === 'bodega') {
                         btns += `<button class="btn-icon btn-check ms-1" onclick="app.restoreItem('${item.id}')" title="Restaurar"><i class="fas fa-trash-restore"></i></button>`;
                     }
-                } else {
+                } 
+                
+                // 2. CASO: ACTIVO (Item Normal)
+                else {
+                    // ROL: FABRICACIÓN
                     if(this.currentUser.role === 'fabricacion') {
-                        if(s.includes('bodega')||s.includes('pendiente')) {
-                            btns += `<button class="btn-icon btn-play ms-1" onclick="app.openStartModal('${item.id}')" title="Iniciar"><i class="fas fa-play"></i></button> <button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')"><i class="fas fa-question"></i></button>`;
-                        } else if(s.includes('fabricación')) {
-                            // AQUÍ ESTÁ EL BOTÓN QUE MARCA COMO 'Entregado'
-                            btns += `<button class="btn-icon btn-check ms-1" onclick="app.updateStatus('${item.id}','Entregado')" title="Finalizar y Entregar"><i class="fas fa-check"></i></button> <button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')"><i class="fas fa-question"></i></button>`;
+                        if(s.includes('bodega') || s.includes('pendiente') || s.includes('solicitud')) {
+                            btns += `<button class="btn-icon btn-play ms-1" onclick="app.openStartModal('${item.id}')" title="Iniciar"><i class="fas fa-play"></i></button>`;
+                            btns += `<button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')" title="Duda"><i class="fas fa-question"></i></button>`;
+                        } 
+                        else if(s.includes('fabric') || s.includes('taller') || s.includes('proceso')) {
+                            btns += `<button class="btn-icon ms-1" style="background-color: #10b981; color: white; border:none;" onclick="app.updateStatus('${item.id}', 'Entregado')" title="Finalizar"><i class="fas fa-check"></i></button>`;
+                            btns += `<button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')" title="Duda"><i class="fas fa-question"></i></button>`;
                         }
-                    } else if (this.currentUser.role === 'bodega') {
-                        if(s.includes('bodega')) btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')" title="Editar"><i class="fas fa-pen"></i></button>`;
-                        if(s.includes('espera')) btns += `<button class="btn-icon btn-warn ms-1" onclick="app.viewDetails('${item.id}')"><i class="fas fa-reply"></i></button>`;
+                    } 
+                    
+                    // ROL: BODEGA Y OPERACIONES
+                    else if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones') {
+                        if(s.includes('bodega') || s.includes('solicitud')) {
+                            btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')" title="Editar"><i class="fas fa-pen"></i></button>`;
+                        }
+                        if(s.includes('espera')) {
+                            btns += `<button class="btn-icon btn-warn ms-1" onclick="app.viewDetails('${item.id}')" title="Responder Duda"><i class="fas fa-reply"></i></button>`;
+                        }
+                        if(s.includes('entregado')) {
+                            btns += `<button class="btn-icon btn-check ms-1" style="background:#059669;" onclick="app.updateStatus('${item.id}','Terminado', 'Recepción Conforme')" title="Cerrar"><i class="fas fa-clipboard-check"></i></button>`;
+                        }
                         btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
-                    } else if (this.currentUser.role === 'admin') {
-                         btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
+                    }
+
+                    // ROL: ADMINISTRADOR (Modo Activo)
+                    else if (this.currentUser.role === 'admin') {
+                        btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')" title="Editar (Modo Admin)"><i class="fas fa-pen"></i></button>`;
+                        btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
                     }
                 }
-
+                // --- FIN LÓGICA DE BOTONES ---
+               
                 let itemsHtml = item.items && item.items.length ? `<div class="svc-item-list"><span class="badge bg-dark rounded-pill">${item.items[0].cantidad}</span> ${item.items[0].producto}</div>` : '';
                 if(item.items && item.items.length > 1) itemsHtml += `<small class="text-muted">+${item.items.length-1} más...</small>`;
                 let entregaHtml = item.fechaEntregaEstimada ? `<div class="text-primary small mt-1"><i class="fas fa-shipping-fast"></i> Entrega: ${item.fechaEntregaEstimada}</div>` : '';
