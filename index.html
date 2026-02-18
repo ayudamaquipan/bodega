@@ -124,7 +124,6 @@
         /* PAGINACIÓN */
         .pagination-container { display: flex; justify-content: center; align-items: center; margin-top: 30px; gap: 15px; }
         .page-info { font-size: 0.9rem; color: #475569; font-weight: 600; background: white; padding: 5px 15px; border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-/* --- ESTILOS NUEVOS FALTANTES (Copiar y Pegar al final del CSS) --- */
 
         /* Etiquetas de Estado (Pills) */
         .status-badge { 
@@ -236,19 +235,31 @@
                 <form id="formSolicitud" onsubmit="app.handleSubmit(event)">
                     <input type="hidden" id="editModeId" value="">
                     <div class="row g-3">
-                        <div class="col-md-3"><div class="form-floating"><input type="text" class="form-control" id="local" placeholder="." required><label>Cliente / Local</label></div></div>
-                        <div class="col-md-3"><div class="form-floating"><input type="text" class="form-control" id="notaVenta" placeholder="." required><label>Nota de Venta #</label></div></div>
-                        <div class="col-md-3"><div class="form-floating"><input type="date" class="form-control" id="fechaReq" placeholder="."><label>Fecha Requerida</label></div></div>
-                        <div class="col-md-3">
-                            <div class="form-floating">
-                                <select class="form-select fw-bold" id="prioridad">
-                                    <option value="Normal">Normal</option>
-                                    <option value="Urgente" class="text-danger fw-bold">🔥 URGENTE</option>
-                                </select>
-                                <label>Prioridad</label>
-                            </div>
-                        </div>
-                    </div>
+    <div class="col-md-3"><div class="form-floating"><input type="text" class="form-control" id="local" placeholder="." required><label>Cliente / Local</label></div></div>
+    <div class="col-md-3"><div class="form-floating"><input type="text" class="form-control" id="notaVenta" placeholder="." required><label>Nota de Venta #</label></div></div>
+    <div class="col-md-2"><div class="form-floating"><input type="date" class="form-control" id="fechaReq" placeholder="."><label>Fecha Req.</label></div></div>
+    
+    <div class="col-md-2">
+        <div class="form-floating">
+            <select class="form-select fw-bold text-primary" id="destinoSolicitud">
+                <option value="Planta">🏭 A Planta</option>
+                <option value="Bodega">📦 A Bodega</option>
+                <option value="Despacho">🚚 A Despacho</option>
+            </select>
+            <label>Destino</label>
+        </div>
+    </div>
+    
+    <div class="col-md-2">
+        <div class="form-floating">
+            <select class="form-select fw-bold" id="prioridad">
+                <option value="Normal">Normal</option>
+                <option value="Urgente" class="text-danger fw-bold">🔥 URGENTE</option>
+            </select>
+            <label>Prioridad</label>
+        </div>
+    </div>
+</div>
                     
                     <datalist id="catalogOptions"></datalist>
 
@@ -277,6 +288,15 @@
                         </div>
                     </div>
                 </div>
+<div class="col-12 mt-3">
+    <div class="card p-4 border-0 shadow-sm glass bg-primary text-white">
+        <h6 class="fw-bold"><i class="fas fa-magic me-2"></i>Reparación de Datos Antiguos</h6>
+        <p class="small opacity-75">Si no ves las solicitudes antiguas, presiona este botón para asignarlas todas a Bodega.</p>
+        <button class="btn btn-light text-primary fw-bold w-100 shadow-sm" onclick="app.fixLegacyData()">
+            <i class="fas fa-sync-alt me-2"></i>Asignar Todo a Bodega Central
+        </button>
+    </div>
+</div>
                 <div class="col-md-6">
                     <div class="card p-4 h-100 border-0 shadow-sm glass">
                         <h6 class="fw-bold"><i class="fas fa-boxes me-2 text-success"></i>Cargar Catálogo</h6>
@@ -324,7 +344,25 @@
             </div>
         </div>
 
-        <div id="servicesList"></div>
+<ul class="nav nav-pills nav-fill mb-3 gap-2 p-1 bg-white rounded-pill border shadow-sm" id="tabMenu">
+    <li class="nav-item" id="li-tab-Planta">
+        <button class="nav-link active rounded-pill fw-bold" id="tab-Planta" onclick="app.switchTab('Planta')">
+            <i class="fas fa-industry me-2"></i>A Planta
+        </button>
+    </li>
+    <li class="nav-item" id="li-tab-Bodega">
+        <button class="nav-link rounded-pill fw-bold" id="tab-Bodega" onclick="app.switchTab('Bodega')">
+            <i class="fas fa-boxes me-2"></i>A Bodega
+        </button>
+    </li>
+    <li class="nav-item" id="li-tab-Despacho">
+        <button class="nav-link rounded-pill fw-bold" id="tab-Despacho" onclick="app.switchTab('Despacho')">
+            <i class="fas fa-truck me-2"></i>A Despacho
+        </button>
+    </li>
+</ul>
+
+<div id="servicesList"></div>
 
         <div class="pagination-container">
             <button class="btn btn-white border shadow-sm" id="btnPrev" onclick="app.prevPage()"><i class="fas fa-chevron-left"></i></button>
@@ -365,21 +403,23 @@
     let db;
     try { firebase.initializeApp(firebaseConfig); db = firebase.database(); } catch (e) { console.error("Error Firebase", e); }
 
-	const USERS = {
-        'bodega': { pass: 'maquipan', role: 'bodega', name: 'Bodega Central' },
-        'planta': { pass: 'maquipan', role: 'fabricacion', name: 'Jefe Planta' },
-        'admin':  { pass: 'admin123', role: 'admin', name: 'Administrador' },
-        'visor':  { pass: 'maquipan', role: 'visor', name: 'Visor Gerencia' },
-        // AGREGAMOS ESTA LÍNEA NUEVA:
-        'operaciones': { pass: 'maquipan', role: 'operaciones', name: 'Operaciones' }
-    };
+const USERS = {
+    'bodega': { pass: 'maquipan', role: 'bodega', name: 'Bodega Central' },
+    'planta': { pass: 'maquipan', role: 'fabricacion', name: 'Jefe Planta' },
+    'admin':  { pass: 'admin123', role: 'admin', name: 'Administrador' },
+    'visor':  { pass: 'maquipan', role: 'visor', name: 'Visor Gerencia' },
+    'operaciones': { pass: 'maquipan', role: 'operaciones', name: 'Operaciones' },
+    'despacho': { pass: 'maquipan', role: 'despacho', name: 'Encargado Despacho' }
+};
+// --- 3. APLICACIÓN PRINCIPAL ---
     const app = {
         data: {}, products: {}, currentUser: null, charts: {},
         beepSound: new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"),
         
-        // Paginación
+        // Paginación y Pestañas
         currentPage: 1,
         itemsPerPage: 20,
+        currentTab: 'Planta', // Pestaña por defecto: 'Planta', 'Bodega', 'Despacho'
 
         init: function() {
             const savedUser = sessionStorage.getItem('maquipan_user');
@@ -397,7 +437,7 @@
             this.addItemRow();
         },
 
-        // --- AUTH ---
+        // --- AUTENTICACIÓN ---
         login: function(e) {
             e.preventDefault();
             const u = document.getElementById('uUser').value.toLowerCase().trim();
@@ -411,20 +451,55 @@
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('loginForm').reset();
         },
-        setCurrentUser: function(u) {
+
+setCurrentUser: function(u) {
             this.currentUser = USERS[u];
             document.getElementById('loginScreen').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
             document.getElementById('userDisplay').innerText = this.currentUser.name;
+            
+            // 1. Ocultar todas las vistas primero
             document.querySelectorAll('.role-view').forEach(el => el.classList.add('hidden'));
-if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones') {
-    document.getElementById('view-bodega').classList.remove('hidden');
-}
-            if (this.currentUser.role === 'admin') document.getElementById('view-admin-tools').classList.remove('hidden');
+            
+            // 2. MOSTRAR VISTAS
+            if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones' || this.currentUser.role === 'admin') {
+                document.getElementById('view-bodega').classList.remove('hidden');
+            }
+            
+            // El admin además ve sus herramientas de importación/exportación
+            if (this.currentUser.role === 'admin') {
+                document.getElementById('view-admin-tools').classList.remove('hidden');
+            }
+
+            // --- 3. LÓGICA DE PESTAÑAS ---
+            const liPlanta = document.getElementById('li-tab-Planta');
+            const liBodega = document.getElementById('li-tab-Bodega');
+            const liDespacho = document.getElementById('li-tab-Despacho');
+
+            [liPlanta, liBodega, liDespacho].forEach(el => el.classList.remove('d-none'));
+
+            if (this.currentUser.role === 'despacho') {
+                liPlanta.classList.add('d-none');
+                liBodega.classList.add('d-none');
+                this.switchTab('Despacho'); 
+            }
+            else if (this.currentUser.role === 'fabricacion') {
+                liDespacho.classList.add('d-none');
+                this.switchTab('Planta');
+            }
+            else if (this.currentUser.role === 'bodega') {
+                liDespacho.classList.add('d-none');
+                this.switchTab('Bodega');
+            }
+            else {
+                // Admin y Operaciones ven todo
+                this.switchTab('Planta');
+            }
+            
             this.renderList();
         },
 
-        // --- CORE ---
+        // --- FORMULARIOS Y CATALOGO ---
         renderCatalog: function() {
             const dl = document.getElementById('catalogOptions'); dl.innerHTML = '';
             const list = Object.values(this.products);
@@ -447,6 +522,8 @@ if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones
                 if(found) div.querySelector('.item-sku').value = found.sku;
             });
         },
+        
+        // --- GUARDAR SOLICITUD ---
         handleSubmit: function(e) {
             e.preventDefault();
             const items = [];
@@ -464,13 +541,24 @@ if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones
             const folio = editId ? this.data[editId].folio : "SOL-" + Math.floor(10000 + Math.random() * 90000);
             const prioridad = document.getElementById('prioridad').value;
             
+            // 1. OBTENER DESTINO
+            const destinoEl = document.getElementById('destinoSolicitud');
+            const destino = destinoEl ? destinoEl.value : "Planta"; 
+
             const historial = editId ? (this.data[editId].historial || []) : [{fecha: fechaFull, estado: "Creado", usuario: this.currentUser.name}];
             if(editId) historial.push({fecha: fechaFull, estado: "Editado", usuario: this.currentUser.name});
 
-            // 1. DETECTAMOS QUIÉN LO CREA PARA PONER EL NOMBRE CORRECTO
-            let estadoInicial = "Solicitud enviada por bodega";
+            // 2. DEFINIR ESTADO INICIAL SEGÚN ROL Y DESTINO
+            let estadoInicial = "Solicitud enviada";
+            
+            // Si es OPERACIONES, el estado inicial depende del destino
             if (this.currentUser.role === 'operaciones') {
-                estadoInicial = "Solicitud de Operaciones";
+                if(destino === 'Planta') estadoInicial = "Solicitud Op. a Planta";
+                if(destino === 'Bodega') estadoInicial = "Solicitud Op. a Bodega";
+                if(destino === 'Despacho') estadoInicial = "Solicitud Op. a Despacho";
+            } else {
+                // Si es Bodega u otro, por defecto a Planta
+                estadoInicial = "Solicitud enviada por bodega"; 
             }
 
             db.ref('solicitudes/'+id).update({
@@ -479,11 +567,11 @@ if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones
                 local: document.getElementById('local').value.toUpperCase(), notaVenta: document.getElementById('notaVenta').value,
                 items: items, observaciones: document.getElementById('observaciones').value, prioridad: prioridad,
                 
-                // 2. USAMOS ESA VARIABLE AQUÍ ABAJO
+                destino: destino, // Guardamos el destino seleccionado
                 estado: editId ? this.data[editId].estado : estadoInicial, 
                 
                 historial: historial
-                      }).then(() => { 
+            }).then(() => { 
                 this.cancelEdit(); 
                 this.showToast(editId ? "Solicitud Actualizada" : "Solicitud Enviada: " + folio); 
             }).catch(err => alert("Error: " + err.message));
@@ -497,6 +585,12 @@ if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones
             document.getElementById('notaVenta').value = item.notaVenta;
             document.getElementById('fechaReq').value = item.fechaReq || '';
             document.getElementById('prioridad').value = item.prioridad || 'Normal';
+            
+            // Cargar destino si existe
+            if(document.getElementById('destinoSolicitud') && item.destino) {
+                document.getElementById('destinoSolicitud').value = item.destino;
+            }
+
             document.getElementById('observaciones').value = item.observaciones || '';
             document.getElementById('itemsContainer').innerHTML = '';
             item.items.forEach(i => this.addItemRow(i));
@@ -515,6 +609,17 @@ if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones
             document.getElementById('cancelEditBtn').classList.add('hidden');
         },
 
+        // --- PESTAÑAS (TABS) ---
+        switchTab: function(tabName) {
+            this.currentTab = tabName;
+            this.currentPage = 1; 
+            // Feedback visual
+            document.querySelectorAll('.nav-link').forEach(btn => btn.classList.remove('active', 'bg-primary', 'text-white'));
+            const activeBtn = document.getElementById('tab-'+tabName);
+            if(activeBtn) activeBtn.classList.add('active', 'bg-primary', 'text-white');
+            this.renderList(); 
+        },
+
         // --- ESTADOS Y ACCIONES ---
         updateStatus: function(id, status, obs = "") {
             if(!this.data[id]) return;
@@ -524,172 +629,145 @@ if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones
             db.ref('solicitudes/'+id).update({ estado: status, historial: hist });
             if(status === 'Entregado') this.generatePDF(item);
         },
-        openStartModal: function(id) { document.getElementById('startIdTarget').value = id; document.getElementById('startEstDate').value = ''; document.getElementById('startComment').value = ''; new bootstrap.Modal(document.getElementById('startModal')).show(); },
-        confirmStartProduction: function() {
-            const id = document.getElementById('startIdTarget').value;
-            const estDate = document.getElementById('startEstDate').value;
-            const comment = document.getElementById('startComment').value;
-            let obsText = ""; if(comment) obsText = `Inicio Fabricación: ${comment}`; if(estDate) obsText += ` (Entrega estimada: ${estDate})`;
-            this.updateStatus(id, 'En fabricación', obsText);
-            if(estDate) db.ref('solicitudes/'+id).update({ fechaEntregaEstimada: estDate });
-            bootstrap.Modal.getInstance(document.getElementById('startModal')).hide();
+        openStartModal: function(id) { 
+            document.getElementById('startIdTarget').value = id; 
+            document.getElementById('startEstDate').value = ''; 
+            document.getElementById('startComment').value = ''; 
+            new bootstrap.Modal(document.getElementById('startModal')).show(); 
         },
-// --- GESTIÓN DE PAPELERA (OPCIÓN 7) ---
+confirmStartProduction: function() {
+    const id = document.getElementById('startIdTarget').value;
+    const estDate = document.getElementById('startEstDate').value;
+    const comment = document.getElementById('startComment').value;
+    
+    // Texto del estado según la pestaña actual
+    let estadoNuevo = "En Proceso"; // Default
+    if (this.currentTab === 'Planta') estadoNuevo = "En Fabricación";
+    if (this.currentTab === 'Bodega') estadoNuevo = "En Preparación Bodega";
+    if (this.currentTab === 'Despacho') estadoNuevo = "En Preparación Despacho";
+
+    let obsText = ""; 
+    if(comment) obsText = `Inicio: ${comment}`; 
+    if(estDate) obsText += ` (Entrega est: ${estDate})`;
+    
+    this.updateStatus(id, estadoNuevo, obsText);
+    
+    if(estDate) db.ref('solicitudes/'+id).update({ fechaEntregaEstimada: estDate });
+    bootstrap.Modal.getInstance(document.getElementById('startModal')).hide();
+},
+        
+        // --- PAPELERA ---
         deleteCloud: function(id) { 
             if(confirm("¿Mover a la papelera?")) {
-                // No borramos, solo actualizamos el estado interno
                 const hist = this.data[id].historial || [];
                 hist.push({fecha: new Date().toISOString(), estado: "ELIMINADO", usuario: this.currentUser.name});
                 db.ref('solicitudes/'+id).update({ deleted: true, historial: hist });
                 this.showToast("Movido a la papelera", "warning");
             }
         },
+        fixLegacyData: function() {
+            if(!confirm("⚠️ ATENCIÓN ⚠️\n\nEsta acción asignará TODAS las solicitudes existentes como si hubieran sido creadas por 'Bodega Central'.\n\nÚsalo solo una vez para corregir datos antiguos.\n\n¿Estás seguro?")) return;
+            
+            const updates = {};
+            let count = 0;
+            
+            Object.values(this.data).forEach(item => {
+                if (item.historial && Array.isArray(item.historial) && item.historial.length > 0) {
+                    updates[`solicitudes/${item.id}/historial/0/usuario`] = "Bodega Central";
+                    if (!item.destino) {
+                        updates[`solicitudes/${item.id}/destino`] = "Planta";
+                    }
+                    count++;
+                }
+            });
+
+            if(count > 0) {
+                db.ref().update(updates)
+                .then(() => alert(`✅ ÉXITO: Se actualizaron ${count} solicitudes.\nAhora aparecen como creadas por Bodega.`))
+                .catch(e => alert("Error: " + e.message));
+            } else {
+                alert("No se encontraron solicitudes para actualizar.");
+            }
+        },
         restoreItem: function(id) {
             if(confirm("¿Restaurar solicitud?")) {
                 const hist = this.data[id].historial || [];
                 hist.push({fecha: new Date().toISOString(), estado: "RESTAURADO", usuario: this.currentUser.name});
-db.ref('solicitudes/'+id).update({ deleted: false, historial: hist });
+                db.ref('solicitudes/'+id).update({ deleted: false, historial: hist });
                 this.showToast("Solicitud Restaurada");
             }
         },
-hardDelete: function(id) {
-            if(confirm("⚠️ ¡PELIGRO!\n\nEstás a punto de borrar esta solicitud PERMANENTEMENTE de la base de datos.\nEsta acción NO se puede deshacer.\n\n¿Estás seguro de eliminarla?")) {
+        hardDelete: function(id) {
+            if(confirm("⚠️ ¡PELIGRO!\n\n¿Estás seguro de eliminarla PERMANENTEMENTE?")) {
                 db.ref('solicitudes/'+id).remove()
-                .then(() => this.showToast("Registro eliminado definitivamente de la BD"))
+                .then(() => this.showToast("Registro eliminado definitivamente"))
                 .catch(err => alert("Error: " + err.message));
             }
         },
+
         // --- ANALYTICS ---
         toggleAnalytics: function() {
             const s = document.getElementById('analyticsSection'); s.style.display = s.style.display === 'none' ? 'block' : 'none';
             if(s.style.display === 'block') this.updateCharts();
         },
-updateCharts: function() {
-            // 1. Verificación de seguridad: si no hay datos o la sección está oculta, no hacemos nada
+        updateCharts: function() {
             if(!this.data || document.getElementById('analyticsSection').style.display === 'none') return;
-            
             const list = Object.values(this.data);
-
-            // --- GRÁFICO 1: ESTADO (DONA) ---
+            
+            // 1. Gráfico Estado
             const stats = {Pendiente:0, Taller:0, Dudas:0, Listo:0};
             list.forEach(i => {
                 const s = (i.estado || "").toLowerCase();
-                if(s.includes('bodega')||s.includes('pendiente')) stats.Pendiente++;
-                else if(s.includes('fabricación')||s.includes('proceso')) stats.Taller++;
+                if(s.includes('bodega')||s.includes('pendiente')||s.includes('solicitud')) stats.Pendiente++;
+                else if(s.includes('fabricación')||s.includes('proceso')||s.includes('taller')) stats.Taller++;
                 else if(s.includes('espera')||s.includes('duda')) stats.Dudas++;
                 else stats.Listo++;
             });
-
             const ctx1 = document.getElementById('chartStatus');
             if(this.charts.status) this.charts.status.destroy();
             this.charts.status = new Chart(ctx1, { 
                 type: 'doughnut', 
-                data: { 
-                    labels: ['Pendiente', 'Taller', 'Dudas', 'Listo'], 
-                    datasets: [{ 
-                        data: Object.values(stats), 
-                        backgroundColor: ['#f59e0b', '#3b82f6', '#ef4444', '#10b981'],
-                        borderWidth: 0
-                    }] 
-                }, 
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom' } }
-                } 
+                data: { labels: ['Pendiente', 'Taller', 'Dudas', 'Listo'], datasets: [{ data: Object.values(stats), backgroundColor: ['#f59e0b', '#3b82f6', '#ef4444', '#10b981'], borderWidth: 0}] }, 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } 
             });
 
-            // --- GRÁFICO 2: SEMANAL (BARRAS) ---
-            const days = {};
-            [...Array(7)].map((_, i) => { 
-                const d = new Date(); 
-                d.setDate(d.getDate() - i); 
-                return d.toISOString().split('T')[0]; 
-            }).reverse().forEach(d => days[d] = 0);
-
-            list.forEach(i => { 
-                const d = i.fechaSolicitud.split('T')[0]; 
-                if(days[d] !== undefined) days[d]++; 
-            });
-
+            // 2. Gráfico Semanal
+            const days = {}; [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split('T')[0]; }).reverse().forEach(d => days[d] = 0);
+            list.forEach(i => { const d = i.fechaSolicitud.split('T')[0]; if(days[d] !== undefined) days[d]++; });
             const ctx2 = document.getElementById('chartWeekly');
             if(this.charts.weekly) this.charts.weekly.destroy();
             this.charts.weekly = new Chart(ctx2, { 
                 type: 'bar', 
-                data: { 
-                    labels: Object.keys(days).map(d=>d.slice(5)), 
-                    datasets: [{ 
-                        label: 'Solicitudes', 
-                        data: Object.values(days), 
-                        backgroundColor: '#2c3e50', 
-                        borderRadius: 5 
-                    }] 
-                }, 
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } } 
-                } 
+                data: { labels: Object.keys(days).map(d=>d.slice(5)), datasets: [{ label: 'Solicitudes', data: Object.values(days), backgroundColor: '#2c3e50', borderRadius: 5 }] }, 
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } 
             });
 
-            // --- GRÁFICO 3: RANKING DE PRODUCTOS (NUEVO) ---
+            // 3. Gráfico Productos
             const productCount = {};
+            list.forEach(req => { if(req.items) req.items.forEach(item => { const name = item.producto || "Sin Nombre"; productCount[name] = (productCount[name] || 0) + 1; }); });
+            const sortedProducts = Object.entries(productCount).sort(([,a], [,b]) => b - a).slice(0, 10);
+            const labelsProd = sortedProducts.map(x => x[0]); const dataProd = sortedProducts.map(x => x[1]);
             
-            list.forEach(req => {
-                if(req.items && Array.isArray(req.items)) {
-                    req.items.forEach(item => {
-                        const name = item.producto || "Sin Nombre";
-                        // Contamos +1 por cada vez que aparece en una solicitud
-                        productCount[name] = (productCount[name] || 0) + 1; 
-                    });
-                }
-            });
-
-            // Ordenar Top 10
-            const sortedProducts = Object.entries(productCount)
-                .sort(([,a], [,b]) => b - a)
-                .slice(0, 10);
-
-            const labelsProd = sortedProducts.map(x => x[0]); 
-            const dataProd = sortedProducts.map(x => x[1]);
-
-            // Actualizar Badge de Líder
-            if(labelsProd.length > 0) {
-                const badge = document.getElementById('topProductBadge');
-                if(badge) badge.innerText = `🏆 Líder: ${labelsProd[0]} (${dataProd[0]} pedidos)`;
-            }
-
+            if(labelsProd.length > 0) document.getElementById('topProductBadge').innerText = `🏆 Líder: ${labelsProd[0]} (${dataProd[0]} pedidos)`;
+            
             const ctx3 = document.getElementById('chartProducts');
-            // Verificamos si existe el canvas (por si acaso)
             if(ctx3) {
                 if(this.charts.products) this.charts.products.destroy();
                 this.charts.products = new Chart(ctx3, {
                     type: 'bar',
-                    data: {
-                        labels: labelsProd,
-                        datasets: [{
-                            label: 'Veces Solicitado',
-                            data: dataProd,
-                            backgroundColor: 'rgba(59, 130, 246, 0.6)', 
-                            borderColor: '#3b82f6',
-                            borderWidth: 1,
-                            borderRadius: 4,
-                            barPercentage: 0.6
-                        }]
-                    },
-                    options: {
-                        indexAxis: 'y', // ESTO HACE LAS BARRAS HORIZONTALES
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
-                    }
+                    data: { labels: labelsProd, datasets: [{ label: 'Veces Solicitado', data: dataProd, backgroundColor: 'rgba(59, 130, 246, 0.6)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 4, barPercentage: 0.6 }] },
+                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } }
                 });
             }
         },
-        // --- REPORTES ---
+
+        // --- EXPORTAR Y PDF ---
         exportToExcel: function() {
-            const data = Object.values(this.data).map(i => ({ Folio: i.folio||i.id, Fecha: this.formatDate(i.fechaSolicitud), Local: i.local, NV: i.notaVenta, Estado: i.estado, Prioridad: i.prioridad||'Normal', Items: i.items.map(x => `${x.cantidad}x ${x.producto}`).join(', ') }));
+            const data = Object.values(this.data).map(i => ({ 
+                Folio: i.folio||i.id, Fecha: this.formatDate(i.fechaSolicitud), Destino: i.destino||'Planta',
+                Local: i.local, NV: i.notaVenta, Estado: i.estado, Prioridad: i.prioridad||'Normal', 
+                Items: i.items.map(x => `${x.cantidad}x ${x.producto}`).join(', ') 
+            }));
             const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Solicitudes"); XLSX.writeFile(wb, "Reporte_Maquipan.xlsx");
         },
         generatePDF: function(item) {
@@ -697,15 +775,19 @@ updateCharts: function() {
             doc.setFillColor(44, 62, 80); doc.rect(0, 0, 210, 20, 'F');
             doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.text("COMPROBANTE DE ENTREGA", 105, 13, null, null, "center");
             doc.setTextColor(0, 0, 0); doc.setFontSize(12); doc.text("MAQUIPAN LTDA", 20, 35);
-            doc.setFontSize(10); doc.text(`Folio: ${item.folio||item.id}`, 150, 35); doc.text(`Fecha Solicitud: ${this.formatDate(item.fechaSolicitud)}`, 150, 40); doc.text(`Fecha Entrega: ${new Date().toLocaleDateString()}`, 150, 45);
+            doc.setFontSize(10); 
+            doc.text(`Folio: ${item.folio||item.id}`, 150, 35); 
+            doc.text(`Fecha Solicitud: ${this.formatDate(item.fechaSolicitud)}`, 150, 40); 
+            doc.text(`Destino: ${item.destino || 'Planta'}`, 150, 45); // Muestra el destino en el PDF
             doc.text(`Cliente: ${item.local}`, 20, 45); doc.text(`Nota Venta: ${item.notaVenta}`, 20, 50);
+            
             doc.autoTable({ startY: 60, head: [['SKU', 'Producto', 'Cant']], body: item.items.map(i => [i.sku, i.producto, i.cantidad]), theme: 'grid', headStyles: { fillColor: [44, 62, 80] } });
             const y = doc.lastAutoTable.finalY + 40;
-            doc.line(20, y, 90, y); doc.text("Recibí Conforme", 25, y+5); doc.line(120, y, 190, y); doc.text("Firma Fabricación", 125, y+5);
+            doc.line(20, y, 90, y); doc.text("Recibí Conforme", 25, y+5); doc.line(120, y, 190, y); doc.text("Firma Responsable", 125, y+5);
             doc.save(`Entrega_${item.folio||item.id}.pdf`);
         },
 
-        // --- AUXILIARES (IMPORTAR) ---
+        // --- IMPORTAR / MIGRACIÓN ---
         importRequests: function() { 
             const file = document.getElementById('jsonReqInput').files[0]; if(!file) return;
             const reader = new FileReader();
@@ -743,68 +825,41 @@ updateCharts: function() {
             };
             reader.readAsText(file);
         },
+
+        // --- UTILIDADES ---
         showToast: function(msg, type='success') {
             const el = document.createElement('div'); el.className = 'custom-toast'; el.innerHTML = `<i class="fas ${type==='success'?'fa-check':'fa-bell text-warning'}"></i> <span>${msg}</span>`;
             document.getElementById('toastContainer').appendChild(el);
             setTimeout(()=>el.classList.add('show'),10); setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),300)},3500);
         },
-checkForAlerts: function() {
-            // 1. Limpieza inicial
+        checkForAlerts: function() {
             const badge = document.getElementById('notifBadge');
             const bell = document.getElementById('bellBtn');
-            badge.classList.remove('active');
-            bell.classList.remove('bell-shake');
-            badge.innerText = "0";
+            badge.classList.remove('active'); bell.classList.remove('bell-shake'); badge.innerText = "0";
 
-            // 2. Filtro de Roles permitidos
             if(!this.currentUser) return;
+            // Solo alerta a quien le corresponda
             const rol = this.currentUser.role;
-            if(rol !== 'bodega' && rol !== 'operaciones') return;
+            if(rol !== 'bodega' && rol !== 'operaciones') return; // Planta usa visualización directa
 
             const list = Object.values(this.data || {});
-            
-            // 3. Conteo de Alertas PROPIAS
             const alertas = list.filter(i => {
-                // A. Debe ser una duda (estado 'espera')
                 if (!i.estado || !i.estado.includes('espera')) return false;
-
-                // B. Identificar al creador
+                // Si es Operaciones: alertas de sus solicitudes
                 const creador = (i.historial && i.historial[0]) ? i.historial[0].usuario : "";
-
-                // C. Coincidencia estricta:
-if (rol === 'operaciones') {
-                    // Operaciones es estricto: Solo lo suyo
-                    return creador.includes('Operaciones');
-                } 
-                
-                if (rol === 'bodega') {
-                    // Bodega recibe alertas de TODO, MENOS de Operaciones
-                    // Así ve alertas de solicitudes antiguas o importadas por Admin
-                    return !creador.includes('Operaciones');
-                }
-                
+                if (rol === 'operaciones') return creador.includes('Operaciones');
+                // Si es Bodega: alertas generales (menos lo de Operaciones)
+                if (rol === 'bodega') return !creador.includes('Operaciones');
                 return false;
             }).length;
 
-            // 4. Mostrar alerta
             badge.innerText = alertas;
-            if(alertas > 0) { 
-                badge.classList.add('active'); 
-                bell.classList.add('bell-shake'); 
-                try{this.beepSound.play().catch(()=>{})}catch(e){} 
-                this.showToast(`Tienes ${alertas} dudas pendientes`, 'warning'); 
-            }
+            if(alertas > 0) { badge.classList.add('active'); bell.classList.add('bell-shake'); try{this.beepSound.play().catch(()=>{})}catch(e){} this.showToast(`Tienes ${alertas} dudas pendientes`, 'warning'); }
         },
-        
-        // --- KPI ANIMATION ---
         animateValue: function(id, end) {
-            const obj = document.getElementById(id);
-            if(!obj) return;
-            const start = parseInt(obj.innerText);
-            if(start === end) return;
-            const range = end - start;
-            const duration = 1000;
-            let startTimestamp = null;
+            const obj = document.getElementById(id); if(!obj) return;
+            const start = parseInt(obj.innerText); if(start === end) return;
+            const range = end - start; const duration = 1000; let startTimestamp = null;
             const step = (timestamp) => {
                 if (!startTimestamp) startTimestamp = timestamp;
                 const progress = Math.min((timestamp - startTimestamp) / duration, 1);
@@ -821,121 +876,123 @@ if (rol === 'operaciones') {
             this.animateValue('kpi-waiting', c('espera')+c('duda'));
             this.animateValue('kpi-done', c('entregado')+c('terminado'));
         },
-        
         formatDate: function(isoString) {
             if(!isoString) return "--";
             const d = new Date(isoString);
             if(isNaN(d.getTime())) return isoString; 
             return d.toLocaleDateString('es-CL') + ' ' + d.toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit'});
         },
+        
         askInfo: function(id){ const q = prompt("¿Duda?"); if(q) this.updateStatus(id, "En espera de información", `CONSULTA: ${q}`); },
-        replyInfo: function(id){ const a = prompt("Respuesta:"); if(a) { this.updateStatus(id, "Solicitud enviada por bodega", `RESPUESTA: ${a}`); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide(); }},
+        replyInfo: function(id){ const a = prompt("Respuesta:"); if(a) { this.updateStatus(id, "Solicitud enviada", `RESPUESTA: ${a}`); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide(); }},
         filterByWarning: function(){ document.getElementById('statusFilter').value='espera'; this.renderList(); },
         
-        // --- PAGINACION ---
         resetPageAndRender: function() { this.currentPage = 1; this.renderList(); },
         prevPage: function() { if(this.currentPage > 1) { this.currentPage--; this.renderList(); } },
         nextPage: function() { this.currentPage++; this.renderList(); },
 
 viewDetails: function(id) {
-            const item = this.data[id];
-            
-            // Construir tabla de items
-            let rows=""; 
-            if(item.items && Array.isArray(item.items)) {
-                item.items.forEach(i=>rows+=`<tr class="border-bottom"><td>${i.producto}</td><td>${i.sku||'-'}</td><td class="fw-bold">${i.cantidad}</td></tr>`);
-            }
-            
-            // --- CONSTRUCCIÓN DEL CHAT / AUDITORÍA ---
-            let chatHtml = '<div class="chat-box">';
-            (item.historial || []).forEach(h => {
-                let css = 'system'; let label = 'Sistema'; let icon = 'fa-info-circle';
-                
-                if(h.usuario && h.usuario.includes('Bodega')) { css='user'; label=h.usuario; icon='fa-user'; }
-                if(h.usuario && h.usuario.includes('Jefe')) { css='admin'; label=h.usuario; icon='fa-hard-hat'; }
-                if(h.usuario && h.usuario.includes('Admin')) { css='admin'; label=h.usuario; icon='fa-shield-alt'; }
-                
-                if(h.estado === 'ELIMINADO') { css='bg-danger text-white border-0'; label='AUDITORÍA'; icon='fa-trash'; }
-                if(h.estado === 'RESTAURADO') { css='bg-success text-white border-0'; label='AUDITORÍA'; icon='fa-trash-restore'; }
+    const item = this.data[id];
+    
+    // 1. Filas de productos
+    let rows = ""; 
+    if(item.items && Array.isArray(item.items)) {
+        item.items.forEach(i => rows += `<tr class="border-bottom"><td>${i.producto}</td><td>${i.sku||'-'}</td><td class="fw-bold text-end">${i.cantidad}</td></tr>`);
+    }
+    
+    // 2. Chat
+    let chatHtml = '<div class="chat-box">';
+    (item.historial || []).forEach(h => {
+        let css = 'system'; let label = 'Sistema'; let icon = 'fa-info-circle';
+        if(h.usuario && h.usuario.toLowerCase().includes('bodega')) { css='user'; label=h.usuario; icon='fa-user'; }
+        if(h.usuario && (h.usuario.toLowerCase().includes('jefe') || h.usuario.toLowerCase().includes('planta'))) { css='admin'; label=h.usuario; icon='fa-hard-hat'; }
+        if(h.usuario && h.usuario.toLowerCase().includes('admin')) { css='admin'; label=h.usuario; icon='fa-shield-alt'; }
+        
+        chatHtml += `<div class="chat-row mb-2"><div class="d-flex justify-content-between small text-muted px-2 mb-1"><span><i class="fas ${icon}"></i> ${label}</span><span>${this.formatDate(h.fecha)}</span></div><div class="chat-bubble ${css} w-100"><strong>${h.estado}</strong>${h.nota ? '<div class="mt-1 fst-italic border-top pt-1 border-white border-opacity-25">'+h.nota+'</div>' : ''}</div></div>`;
+    });
+    chatHtml += '</div>';
 
-                chatHtml += `
-                <div class="chat-row mb-2">
-                    <div class="d-flex justify-content-between small text-muted px-2 mb-1">
-                        <span><i class="fas ${icon}"></i> ${label}</span>
-                        <span>${this.formatDate(h.fecha)}</span>
-                    </div>
-                    <div class="chat-bubble ${css} w-100">
-                        <strong>${h.estado}</strong>
-                        ${h.nota ? '<div class="mt-1 fst-italic border-top pt-1 border-white border-opacity-25">'+h.nota+'</div>' : ''}
-                    </div>
-                </div>`;
-            });
-            chatHtml += '</div>';
+    // 3. Botones
+    let buttonsHtml = '';
+    if (item.deleted) {
+        if (this.currentUser.role === 'admin' || this.currentUser.role === 'bodega') {
+            buttonsHtml = `<button class="btn btn-success w-100 mt-3 shadow-lg fw-bold py-2" onclick="app.restoreItem('${id}'); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();"><i class="fas fa-trash-restore me-2"></i>RESTAURAR SOLICITUD</button>`;
+        }
+    } else {
+        if((this.currentUser.role==='bodega' || this.currentUser.role==='operaciones') && item.estado.includes('espera')) {
+            buttonsHtml += `<button class="btn btn-warning w-100 mt-3 shadow-sm fw-bold" onclick="app.replyInfo('${id}')"><i class="fas fa-reply me-2"></i>Responder Solicitud</button>`;
+        }
+        buttonsHtml += `<button class="btn btn-sm btn-outline-danger mt-3 w-100" onclick="app.generatePDF(app.data['${id}'])"><i class="fas fa-file-pdf me-2"></i>Descargar Comprobante PDF</button>`;
+    }
+    
+    const deletedBanner = item.deleted ? '<div class="alert alert-danger fw-bold text-center mb-3 shadow-sm"><i class="fas fa-trash-alt me-2"></i> ESTA SOLICITUD ESTÁ EN LA PAPELERA</div>' : '';
 
-            // --- LÓGICA DE BOTONES ---
-            let buttonsHtml = '';
+    // --- NUEVO: MOSTRAR OBSERVACIONES ---
+    const obsHtml = item.observaciones 
+        ? `<div class="alert alert-secondary border-0 bg-opacity-10 p-3 rounded-3 mb-3">
+             <h6 class="fw-bold small text-dark mb-1"><i class="fas fa-comment-dots me-2"></i>Observaciones:</h6>
+             <p class="mb-0 small fst-italic text-muted">${item.observaciones}</p>
+           </div>` 
+        : '';
 
-            // 1. SI ESTÁ ELIMINADO: Mostrar solo botón de restaurar (AQUÍ ESTABA EL FALTANTE)
-            if (item.deleted) {
-                if (this.currentUser.role === 'admin' || this.currentUser.role === 'bodega') {
-                    buttonsHtml = `
-                    <button class="btn btn-success w-100 mt-3 shadow-lg fw-bold py-2" onclick="app.restoreItem('${id}'); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();">
-                        <i class="fas fa-trash-restore me-2"></i>RESTAURAR SOLICITUD
-                    </button>`;
-                }
-            } else {
-                // 2. SI ESTÁ ACTIVO: Mostrar botones normales
-                if(this.currentUser.role==='bodega' && item.estado.includes('espera')) {
-                    buttonsHtml += `<button class="btn btn-warning w-100 mt-3 shadow-sm fw-bold" onclick="app.replyInfo('${id}')"><i class="fas fa-reply me-2"></i>Responder Solicitud</button>`;
-                }
-                if(this.currentUser.role==='bodega' && item.estado.includes('bodega')) {
-                    buttonsHtml += `<button class="btn btn-secondary w-100 mt-2 shadow-sm" onclick="app.loadForEdit('${id}')">✏️ Editar Solicitud</button>`;
-                }
-                // PDF
-                buttonsHtml += `<button class="btn btn-sm btn-outline-danger mt-3 w-100" onclick="app.generatePDF(app.data['${id}'])"><i class="fas fa-file-pdf me-2"></i>Descargar Comprobante PDF</button>`;
-            }
-            
-            // Banner de alerta visual si está borrado
-            let deletedBanner = item.deleted ? '<div class="alert alert-danger fw-bold text-center mb-3 shadow-sm"><i class="fas fa-trash-alt me-2"></i> ESTA SOLICITUD ESTÁ EN LA PAPELERA</div>' : '';
+    // --- NUEVO: CONTROL DE ESTADO PARA ADMIN ---
+    let statusDisplay = `<span class="badge bg-dark">${item.estado}</span>`;
+    
+    if (this.currentUser.role === 'admin' && !item.deleted) {
+        // Lista de estados posibles
+        const estados = ["Solicitud enviada", "En Fabricación", "En Preparación Bodega", "En Preparación Despacho", "En espera de información", "Terminado", "Entregado"];
+        
+        let options = estados.map(e => `<option value="${e}" ${item.estado === e ? 'selected' : ''}>${e}</option>`).join('');
+        
+        statusDisplay = `
+            <div class="input-group input-group-sm justify-content-end" style="width: 240px;">
+                <select id="adminStatusSelect" class="form-select form-select-sm fw-bold text-primary border-primary">
+                    ${options}
+                </select>
+                <button class="btn btn-primary" onclick="app.forceStatusChange('${id}')" title="Guardar Estado"><i class="fas fa-save"></i></button>
+            </div>
+        `;
+    }
 
-            // Renderizar Modal
-            document.getElementById('modalBodyContent').innerHTML=`
-                ${deletedBanner}
-                <div class="row mb-3">
-                    <div class="col-6"><h4 class="mb-0 fw-bold">${item.local}</h4><small class="text-muted">Cliente</small></div>
-                    <div class="col-6 text-end"><h4 class="mb-0 text-primary fw-bold">#${item.notaVenta}</h4><small class="text-muted">Nota Venta</small></div>
-                </div>
-                <div class="bg-light p-3 rounded mb-3 d-flex justify-content-between align-items-center shadow-sm border">
-                    <div>
-                        <small class="text-muted d-block">FOLIO INTERNO</small>
-                        <span class="fs-5 fw-bold text-dark">${item.folio||'S/N'}</span>
-                    </div>
-                    <div class="text-end">
-                        <span class="badge ${item.prioridad==='Urgente'?'bg-danger':'bg-info'} mb-1">${item.prioridad||'Normal'}</span><br>
-                        <span class="badge bg-dark">${item.estado}</span>
-                    </div>
-                </div>
-                
-                <h6 class="small text-muted fw-bold border-bottom pb-2 mb-3">MATERIALES SOLICITADOS</h6>
-                <div class="table-responsive mb-4" style="max-height:150px; overflow-y:auto;">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light sticky-top"><tr><th>Producto</th><th>SKU</th><th class="text-end">Cant.</th></tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>
-                
-                <h6 class="small text-muted fw-bold border-bottom pb-2 mb-3">AUDITORÍA Y BITÁCORA</h6>
-                ${chatHtml}
-                
-                ${buttonsHtml}`; // Insertamos los botones aquí
-            
-            new bootstrap.Modal(document.getElementById('detailModal')).show();
-        },
+    // Renderizar Modal
+    document.getElementById('modalBodyContent').innerHTML=`
+        ${deletedBanner}
+        <div class="row mb-3">
+            <div class="col-6"><h4 class="mb-0 fw-bold">${item.local}</h4><small class="text-muted">Cliente</small></div>
+            <div class="col-6 text-end"><h4 class="mb-0 text-primary fw-bold">#${item.notaVenta}</h4><small class="text-muted">Nota Venta</small></div>
+        </div>
+        
+        <div class="bg-light p-3 rounded mb-3 d-flex justify-content-between align-items-center shadow-sm border">
+            <div><small class="text-muted d-block">FOLIO INTERNO</small><span class="fs-5 fw-bold text-dark">${item.folio||'S/N'}</span></div>
+            <div class="text-end">
+                <span class="badge ${item.prioridad==='Urgente'?'bg-danger':'bg-info'} mb-1">${item.prioridad||'Normal'}</span><br>
+                ${statusDisplay}
+            </div>
+        </div>
+        
+        <h6 class="small text-muted fw-bold border-bottom pb-2 mb-3">DESTINO: <span class="text-primary">${item.destino || 'Planta'}</span></h6>
+        
+        ${obsHtml} 
 
-renderList: function() {
+        <div class="table-responsive mb-4" style="max-height:150px; overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0"><thead class="table-light sticky-top"><tr><th>Producto</th><th>SKU</th><th class="text-end">Cant.</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>
+        <h6 class="small text-muted fw-bold border-bottom pb-2 mb-3">AUDITORÍA Y BITÁCORA</h6>${chatHtml}${buttonsHtml}`;
+    
+    new bootstrap.Modal(document.getElementById('detailModal')).show();
+},
+
+forceStatusChange: function(id) {
+    const newVal = document.getElementById('adminStatusSelect').value;
+    if(confirm(`¿Como ADMIN, deseas forzar el estado a: "${newVal}"?`)) {
+        this.updateStatus(id, newVal, "Cambio manual forzado por Administrador");
+        this.showToast("Estado actualizado por Admin");
+        setTimeout(() => this.viewDetails(id), 500);
+    }
+},
+
+        renderList: function() {
             const container = document.getElementById('servicesList'); if(!this.data) return;
-            
-            // Obtenemos valores de filtros
             const search = document.getElementById('searchInput').value.toLowerCase();
             const filter = document.getElementById('statusFilter').value.toLowerCase();
             const dateStart = document.getElementById('dateStart').value;
@@ -943,64 +1000,60 @@ renderList: function() {
 
             container.innerHTML = '';
             
+            // Ordenar por ID descendente
             let list = Object.values(this.data).sort((a,b) => (b.id||0) - (a.id||0));
             
-            // --- LÓGICA DE FILTRADO CORREGIDA ---
-list = list.filter(i => {
-                // --- INICIO: LÓGICA DE PRIVACIDAD TOTAL ---
-                
-                // 1. Identificar quién creó la solicitud (Dueño)
-                // Usamos validación segura por si el historial viene vacío
+            // 1. FILTRADO (Aquí definimos 'creador' para saber QUÉ mostrar)
+            list = list.filter(i => {
                 const creador = (i.historial && i.historial.length > 0) ? i.historial[0].usuario : "Desconocido";
+                const destinoItem = i.destino || "Planta"; 
 
-                // 2. Si soy OPERACIONES: Solo veo lo que diga "Operaciones"
-                if(this.currentUser.role === 'operaciones') {
-                    if(!creador.includes('Operaciones')) return false;
-                }
-
-                // 3. Si soy BODEGA: Solo veo lo que diga "Bodega"
-                // (Esto oculta las solicitudes de Operaciones y de Admin)
-if(this.currentUser.role === 'bodega') {
-                    // En vez de decir "Solo muestra Bodega", decimos:
-                    // "Si es de Operaciones, OCÚLTALO. El resto (Admin, Antiguos, Masivos), MUÉSTRALO."
-                    if(creador.includes('Operaciones')) return false;
-                }                
-                // --- FIN LÓGICA DE PRIVACIDAD ---
-
-                const s = (i.estado || "").toLowerCase(); // Estado en minúsculas
+                // --- PERMISOS DE VISUALIZACIÓN ---
+                if (this.currentUser.role === 'admin') { /* Ve todo */ }
                 
-                // 1. Filtro Papelera
-                const isDeleted = i.deleted === true;
-                if(filter === 'eliminado') {
-                    if(!isDeleted) return false; 
-                } else {
-                    if(isDeleted) return false; 
+                else if (this.currentUser.role === 'operaciones') {
+                    const loCreeYo = creador.includes('Operaciones');
+                    if (!loCreeYo) return false; 
                 }
 
-                // 2. Filtro Fechas
+                else if (this.currentUser.role === 'bodega') {
+                    const loCreeYo = creador.includes('Bodega');
+                    const esParaMi = (destinoItem === 'Bodega');
+                    if (!loCreeYo && !esParaMi) return false;
+                }
+
+                else if (this.currentUser.role === 'fabricacion') {
+                    if (destinoItem !== 'Planta') return false;
+                }
+
+                else if (this.currentUser.role === 'despacho') {
+                    if (destinoItem !== 'Despacho') return false;
+                }
+
+                // --- PESTAÑA VISUAL ---
+                if (destinoItem !== this.currentTab) return false;
+
+                // --- FILTROS COMUNES ---
+                const isDeleted = i.deleted === true;
+                if(filter === 'eliminado') { if(!isDeleted) return false; } 
+                else { if(isDeleted) return false; }
+
+                const txt = `${i.local} ${i.notaVenta} ${i.estado} ${i.folio||''}`.toLowerCase();
                 const fechaItem = i.fechaSolicitud.split('T')[0];
+                
                 if(dateStart && fechaItem < dateStart) return false;
                 if(dateEnd && fechaItem > dateEnd) return false;
 
-                // 3. Filtro de Estado Inteligente (AQUÍ ESTÁ EL ARREGLO)
                 let statusMatch = true;
                 if (filter && filter !== 'eliminado') {
-                    if (filter === 'terminado') {
-                        // Si filtro es 'terminado', aceptamos: Terminado, Entregado o Listo
-                        statusMatch = s.includes('terminado') || s.includes('entregado') || s.includes('listo');
-                    } else {
-                        // Para el resto (bodega, fabricación, espera)
-                        statusMatch = s.includes(filter);
-                    }
+                    if (filter === 'terminado') statusMatch = (i.estado||"").toLowerCase().match(/terminado|entregado|listo/);
+                    else statusMatch = (i.estado||"").toLowerCase().includes(filter);
                 }
-
-                // 4. Buscador de Texto General
-                const txt = `${i.local} ${i.notaVenta} ${i.estado} ${i.folio||''}`.toLowerCase();
                 
                 return txt.includes(search) && statusMatch;
             });
             
-            // --- PAGINACIÓN Y RENDERIZADO ---
+            // PAGINACIÓN
             const totalItems = list.length;
             const totalPages = Math.ceil(totalItems / this.itemsPerPage);
             if (this.currentPage < 1) this.currentPage = 1;
@@ -1010,23 +1063,28 @@ if(this.currentUser.role === 'bodega') {
             const end = start + this.itemsPerPage;
             const pageItems = list.slice(start, end);
 
-            if(!totalItems) return container.innerHTML = '<div class="text-center py-5 text-muted opacity-50"><i class="fas fa-inbox fa-3x mb-3"></i><p>Sin resultados disponibles</p></div>';
+            if(!totalItems) return container.innerHTML = '<div class="text-center py-5 text-muted opacity-50"><i class="fas fa-inbox fa-3x mb-3"></i><p>No tienes solicitudes en esta sección</p></div>';
             
             const today = new Date().toISOString().split('T')[0];
 
+            // 2. DIBUJADO
             pageItems.forEach((item, index) => {
-                // Configuración visual
+                
+                // CREADOR
+                const creador = (item.historial && item.historial.length > 0) ? item.historial[0].usuario : "Desconocido";
+
                 let strip='strip-pendiente', badge='bg-st-pendiente', icon='<i class="far fa-clock"></i>';
                 const s = (item.estado||"").toLowerCase();
                 
-                if(s.includes('fabricación')) { strip='strip-proceso'; badge='bg-st-proceso'; icon='<i class="fas fa-hammer"></i>'; }
-                if(s.includes('espera')) { strip='strip-espera'; badge='bg-st-espera'; icon='<i class="fas fa-exclamation-triangle"></i>'; }
-                
-                // CORRECCIÓN VISUAL: Asegurar que Entregado se vea verde
+                if(s.includes('fabricación')||s.includes('proceso')||s.includes('prepara')||s.includes('taller')) { 
+                    strip='strip-proceso'; badge='bg-st-proceso'; icon='<i class="fas fa-hammer"></i>'; 
+                }
+                if(s.includes('espera')||s.includes('duda')) { 
+                    strip='strip-espera'; badge='bg-st-espera'; icon='<i class="fas fa-exclamation-triangle"></i>'; 
+                }
                 if(s.includes('terminado')||s.includes('entregado')||s.includes('listo')) { 
                     strip='strip-terminado'; badge='bg-st-terminado'; icon='<i class="fas fa-check"></i>'; 
                 }
-                
                 if(item.deleted) { strip='bg-secondary'; badge='bg-secondary'; icon='<i class="fas fa-trash"></i>'; }
 
                 let urgentClass = (item.prioridad === 'Urgente' && !s.includes('entregado') && !item.deleted) ? 'card-urgente' : '';
@@ -1036,59 +1094,38 @@ if(this.currentUser.role === 'bodega') {
                     urgentClass = 'card-atrasado'; atrasadoBadge = '<span class="badge-atrasado">🚨 ATRASADO</span>'; 
                 }
 
-                // BOTONES DE ACCIÓN
+                // LÓGICA DE BOTONES
                 let btns = `<button class="btn-icon btn-view" onclick="app.viewDetails('${item.id}')"><i class="fas fa-eye"></i></button>`;
-                
-// --- INICIO LÓGICA DE BOTONES (CORREGIDA) ---
-                
-                // 1. CASO: PAPELERA (Item Eliminado)
+
                 if (item.deleted) {
-                    // Si es ADMIN: Ve Restaurar y ELIMINAR DEFINITIVO
-                    if (this.currentUser.role === 'admin') {
-                        btns += `<button class="btn-icon btn-check ms-1" onclick="app.restoreItem('${item.id}')" title="Restaurar"><i class="fas fa-trash-restore"></i></button>`;
-                        btns += `<button class="btn-icon ms-1" style="background:#7f1d1d; color:white" onclick="app.hardDelete('${item.id}')" title="ELIMINAR DEFINITIVAMENTE DE BD"><i class="fas fa-skull-crossbones"></i></button>`;
-                    } 
-                    // Si es BODEGA: Solo ve Restaurar
-                    else if (this.currentUser.role === 'bodega') {
-                        btns += `<button class="btn-icon btn-check ms-1" onclick="app.restoreItem('${item.id}')" title="Restaurar"><i class="fas fa-trash-restore"></i></button>`;
+                    if (this.currentUser.role === 'admin' || this.currentUser.role === 'bodega') {
+                        btns += `<button class="btn-icon btn-check ms-1" onclick="app.restoreItem('${item.id}')"><i class="fas fa-trash-restore"></i></button>`;
+                        if (this.currentUser.role === 'admin') btns += `<button class="btn-icon ms-1" style="background:#7f1d1d; color:white" onclick="app.hardDelete('${item.id}')"><i class="fas fa-skull-crossbones"></i></button>`;
                     }
-                } 
-                
-                // 2. CASO: ACTIVO (Item Normal)
-                else {
-                    // ROL: FABRICACIÓN
-                    if(this.currentUser.role === 'fabricacion') {
-                        if(s.includes('bodega') || s.includes('pendiente') || s.includes('solicitud')) {
+                } else {
+                    let esMiArea = false;
+                    if (this.currentUser.role === 'fabricacion' && this.currentTab === 'Planta') esMiArea = true;
+                    if (this.currentUser.role === 'bodega' && this.currentTab === 'Bodega') esMiArea = true;
+                    if (this.currentUser.role === 'despacho' && this.currentTab === 'Despacho') esMiArea = true;
+
+                    if (esMiArea) {
+                        if(s.includes('pendiente') || s.includes('solicitud') || s.includes('enviada') || s.includes('espera')) {
                             btns += `<button class="btn-icon btn-play ms-1" onclick="app.openStartModal('${item.id}')" title="Iniciar"><i class="fas fa-play"></i></button>`;
+                        } else if(s.includes('fabric') || s.includes('proceso') || s.includes('prepara')) {
+                            btns += `<button class="btn-icon ms-1" style="background-color: #10b981; color: white;" onclick="app.updateStatus('${item.id}', 'Entregado', 'Finalizado OK')" title="Finalizar"><i class="fas fa-check"></i></button>`;
+                        }
+                        if(!s.includes('entregado') && !s.includes('terminado')) {
                             btns += `<button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')" title="Duda"><i class="fas fa-question"></i></button>`;
-                        } 
-                        else if(s.includes('fabric') || s.includes('taller') || s.includes('proceso')) {
-                            btns += `<button class="btn-icon ms-1" style="background-color: #10b981; color: white; border:none;" onclick="app.updateStatus('${item.id}', 'Entregado')" title="Finalizar"><i class="fas fa-check"></i></button>`;
-                            btns += `<button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')" title="Duda"><i class="fas fa-question"></i></button>`;
                         }
-                    } 
-                    
-                    // ROL: BODEGA Y OPERACIONES
-                    else if (this.currentUser.role === 'bodega' || this.currentUser.role === 'operaciones') {
-                        if(s.includes('bodega') || s.includes('solicitud')) {
-                            btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')" title="Editar"><i class="fas fa-pen"></i></button>`;
-                        }
-                        if(s.includes('espera')) {
-                            btns += `<button class="btn-icon btn-warn ms-1" onclick="app.viewDetails('${item.id}')" title="Responder Duda"><i class="fas fa-reply"></i></button>`;
-                        }
-                        if(s.includes('entregado')) {
-                            btns += `<button class="btn-icon btn-check ms-1" style="background:#059669;" onclick="app.updateStatus('${item.id}','Terminado', 'Recepción Conforme')" title="Cerrar"><i class="fas fa-clipboard-check"></i></button>`;
-                        }
-                        btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
                     }
 
-                    // ROL: ADMINISTRADOR (Modo Activo)
-                    else if (this.currentUser.role === 'admin') {
-                        btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')" title="Editar (Modo Admin)"><i class="fas fa-pen"></i></button>`;
+                    const soyCreador = creador.includes(this.currentUser.name) || (this.currentUser.role === 'operaciones' && creador.includes('Operaciones'));
+                    
+                    if (this.currentUser.role === 'admin' || (soyCreador && !s.includes('proceso') && !s.includes('entregado'))) {
+                        btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')"><i class="fas fa-pen"></i></button>`;
                         btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
                     }
                 }
-                // --- FIN LÓGICA DE BOTONES ---
                
                 let itemsHtml = item.items && item.items.length ? `<div class="svc-item-list"><span class="badge bg-dark rounded-pill">${item.items[0].cantidad}</span> ${item.items[0].producto}</div>` : '';
                 if(item.items && item.items.length > 1) itemsHtml += `<small class="text-muted">+${item.items.length-1} más...</small>`;
