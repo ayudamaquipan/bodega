@@ -104,6 +104,19 @@
         .chat-bubble.user { background: #fff; border-bottom-left-radius: 2px; border: 1px solid #e2e8f0; color: #1e293b; align-self: flex-start; }
         .chat-bubble.admin { background: #dbeafe; border-bottom-right-radius: 2px; color: #1e40af; align-self: flex-end; }
         
+        /* --- ESTILOS NUEVOS PARA AUDITORÍA (DIFF) --- */
+        .diff-log {
+            font-size: 0.75rem;
+            background: rgba(0,0,0,0.05);
+            padding: 5px;
+            margin-top: 5px;
+            border-radius: 6px;
+            border-left: 3px solid #f59e0b; /* Naranja para cambios */
+            font-family: monospace;
+            color: #444;
+        }
+        .diff-item { display: block; margin-bottom: 2px; }
+
         .nav-icon-btn { position: relative; background: rgba(255,255,255,0.5); width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.5); cursor: pointer; color: #2c3e50; transition: 0.3s; }
         .nav-icon-btn:hover { background: white; transform: rotate(15deg); }
         .notification-badge { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; opacity: 0; box-shadow: 0 2px 5px rgba(239, 68, 68, 0.4); }
@@ -523,9 +536,12 @@ setCurrentUser: function(u) {
             });
         },
         
-        // --- GUARDAR SOLICITUD ---
+        // --- GUARDAR SOLICITUD (MEJORADA CON AUDITORÍA) ---
+// --- GUARDAR SOLICITUD (CON DETALLE EXACTO EN OBSERVACIONES) ---
         handleSubmit: function(e) {
             e.preventDefault();
+            
+            // 1. Recopilar items del formulario
             const items = [];
             document.querySelectorAll('.item-row').forEach(r => {
                 const desc = r.querySelector('.item-desc').value;
@@ -535,45 +551,92 @@ setCurrentUser: function(u) {
             });
             if(!items.length) return alert("Faltan items");
 
+            // 2. Datos básicos
             const editId = document.getElementById('editModeId').value;
             const id = editId || Date.now().toString();
             const fechaFull = new Date().toISOString(); 
-            const folio = editId ? this.data[editId].folio : "SOL-" + Math.floor(10000 + Math.random() * 90000);
             const prioridad = document.getElementById('prioridad').value;
-            
-            // 1. OBTENER DESTINO
             const destinoEl = document.getElementById('destinoSolicitud');
-            const destino = destinoEl ? destinoEl.value : "Planta"; 
+            const destino = destinoEl ? destinoEl.value : "Planta";
+            const local = document.getElementById('local').value.toUpperCase();
+            const notaVenta = document.getElementById('notaVenta').value;
+            const fechaReq = document.getElementById('fechaReq').value;
+            const obs = document.getElementById('observaciones').value;
 
-            const historial = editId ? (this.data[editId].historial || []) : [{fecha: fechaFull, estado: "Creado", usuario: this.currentUser.name}];
-            if(editId) historial.push({fecha: fechaFull, estado: "Editado", usuario: this.currentUser.name});
+            // 3. Lógica de Historial y Detección de Cambios
+            let historial = [];
+            let estadoInicial = "Solicitud enviada"; 
 
-            // 2. DEFINIR ESTADO INICIAL SEGÚN ROL Y DESTINO
-            let estadoInicial = "Solicitud enviada";
-            
-            // Si es OPERACIONES, el estado inicial depende del destino
-            if (this.currentUser.role === 'operaciones') {
-                if(destino === 'Planta') estadoInicial = "Solicitud Op. a Planta";
-                if(destino === 'Bodega') estadoInicial = "Solicitud Op. a Bodega";
-                if(destino === 'Despacho') estadoInicial = "Solicitud Op. a Despacho";
+            if (editId && this.data[editId]) {
+                // --- MODO EDICIÓN: DETECTAR CAMBIOS DETALLADOS ---
+                const oldItem = this.data[editId];
+                historial = oldItem.historial || [];
+                
+                let cambios = []; 
+
+                // Comparar campos simples
+                if (oldItem.local !== local) cambios.push(`<span class="diff-item">Cliente: ${oldItem.local} ➝ ${local}</span>`);
+                if (oldItem.notaVenta !== notaVenta) cambios.push(`<span class="diff-item">NV: ${oldItem.notaVenta} ➝ ${notaVenta}</span>`);
+                if (oldItem.fechaReq !== fechaReq) cambios.push(`<span class="diff-item">Fecha Req: ${oldItem.fechaReq||'--'} ➝ ${fechaReq}</span>`);
+                if (oldItem.destino !== destino) cambios.push(`<span class="diff-item">Destino: ${oldItem.destino} ➝ ${destino}</span>`);
+                if (oldItem.prioridad !== prioridad) cambios.push(`<span class="diff-item">Prioridad: ${oldItem.prioridad} ➝ <b>${prioridad}</b></span>`);
+                
+                // --- AQUÍ ESTÁ EL CAMBIO PARA LAS OBSERVACIONES ---
+                const oldObs = oldItem.observaciones || '';
+                if (oldObs !== obs) {
+                    // Muestra: Obs: "Texto viejo" ➝ "Texto nuevo"
+                    // Usamos un estilo italic y gris para el texto viejo para que se distinga
+                    cambios.push(`<span class="diff-item">Obs: <i class="text-muted">"${oldObs}"</i> ➝ <b>"${obs}"</b></span>`);
+                }
+
+                // Comparar Items 
+                const oldItemsStr = JSON.stringify(oldItem.items);
+                const newItemsStr = JSON.stringify(items);
+                if (oldItemsStr !== newItemsStr) {
+                    cambios.push(`<span class="diff-item">Productos: Se modificó la lista de items</span>`);
+                }
+
+                if (cambios.length === 0) cambios.push("Edición guardada sin cambios visibles.");
+
+                const logHtml = `<div class="diff-log">${cambios.join('')}</div>`;
+
+                historial.push({
+                    fecha: fechaFull, 
+                    estado: "Editado (Auditoría)", 
+                    usuario: this.currentUser.name,
+                    nota: logHtml 
+                });
+
             } else {
-                // Si es Bodega u otro, por defecto a Planta
-                estadoInicial = "Solicitud enviada por bodega"; 
+                // --- MODO CREACIÓN ---
+                historial = [{fecha: fechaFull, estado: "Creado", usuario: this.currentUser.name}];
+                if (this.currentUser.role === 'operaciones') {
+                    if(destino === 'Planta') estadoInicial = "Solicitud Op. a Planta";
+                    if(destino === 'Bodega') estadoInicial = "Solicitud Op. a Bodega";
+                    if(destino === 'Despacho') estadoInicial = "Solicitud Op. a Despacho";
+                } else {
+                    estadoInicial = "Solicitud enviada por bodega"; 
+                }
             }
 
+            // 4. Guardar en Firebase
+            const folio = editId ? this.data[editId].folio : "SOL-" + Math.floor(10000 + Math.random() * 90000);
+
             db.ref('solicitudes/'+id).update({
-                id: id, folio: folio, fechaSolicitud: editId ? this.data[editId].fechaSolicitud : fechaFull, 
-                fechaReq: document.getElementById('fechaReq').value,
-                local: document.getElementById('local').value.toUpperCase(), notaVenta: document.getElementById('notaVenta').value,
-                items: items, observaciones: document.getElementById('observaciones').value, prioridad: prioridad,
-                
-                destino: destino, // Guardamos el destino seleccionado
+                id: id, folio: folio, 
+                fechaSolicitud: editId ? this.data[editId].fechaSolicitud : fechaFull, 
+                fechaReq: fechaReq,
+                local: local, 
+                notaVenta: notaVenta,
+                items: items, 
+                observaciones: obs, 
+                prioridad: prioridad,
+                destino: destino,
                 estado: editId ? this.data[editId].estado : estadoInicial, 
-                
                 historial: historial
             }).then(() => { 
                 this.cancelEdit(); 
-                this.showToast(editId ? "Solicitud Actualizada" : "Solicitud Enviada: " + folio); 
+                this.showToast(editId ? "Modificación Registrada" : "Solicitud Enviada: " + folio); 
             }).catch(err => alert("Error: " + err.message));
         },
 
