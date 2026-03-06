@@ -382,6 +382,7 @@
             <span class="page-info" id="pageInfo">Cargando...</span>
             <button class="btn btn-white border shadow-sm" id="btnNext" onclick="app.nextPage()"><i class="fas fa-chevron-right"></i></button>
         </div>
+
 <div class="modal fade" id="detailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content border-0 shadow-lg" style="border-radius: 20px;"><div class="modal-header border-0 pb-0 bg-light rounded-top-4 p-4"><h5 class="modal-title fw-bold text-primary"><i class="fas fa-file-alt me-2"></i>Detalle de Solicitud</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-4 bg-light rounded-bottom-4" id="modalBodyContent"></div></div></div></div>
 
 <div class="modal fade" id="startModal" tabindex="-1">
@@ -396,6 +397,25 @@
         <div class="mb-3"><label class="form-label fw-bold">Comentario Inicial</label><textarea class="form-control rounded-3" id="startComment" rows="2" placeholder="Opcional: Materiales, notas..."></textarea></div>
         <input type="hidden" id="startIdTarget">
         <button type="button" class="btn btn-primary w-100 fw-bold rounded-3 py-2" onclick="app.confirmStartProduction()">CONFIRMAR INICIO</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="finishModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+      <div class="modal-header bg-success text-white rounded-top-4">
+        <h5 class="modal-title"><i class="fas fa-check-circle me-2"></i>Finalizar Solicitud</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="mb-3">
+            <label class="form-label fw-bold">Observación de Cierre</label>
+            <textarea class="form-control rounded-3" id="finishComment" rows="3" placeholder="Ej: Trabajo completado, se usaron materiales extra..."></textarea>
+        </div>
+        <input type="hidden" id="finishIdTarget">
+        <button type="button" class="btn btn-success w-100 fw-bold rounded-3 py-2" onclick="app.confirmFinishItem()">CONFIRMAR ENTREGA</button>
       </div>
     </div>
   </div>
@@ -698,26 +718,40 @@ setCurrentUser: function(u) {
             document.getElementById('startComment').value = ''; 
             new bootstrap.Modal(document.getElementById('startModal')).show(); 
         },
-confirmStartProduction: function() {
-    const id = document.getElementById('startIdTarget').value;
-    const estDate = document.getElementById('startEstDate').value;
-    const comment = document.getElementById('startComment').value;
-    
-    // Texto del estado según la pestaña actual
-    let estadoNuevo = "En Proceso"; // Default
-    if (this.currentTab === 'Planta') estadoNuevo = "En Fabricación";
-    if (this.currentTab === 'Bodega') estadoNuevo = "En Preparación Bodega";
-    if (this.currentTab === 'Despacho') estadoNuevo = "En Preparación Despacho";
+        confirmStartProduction: function() {
+            const id = document.getElementById('startIdTarget').value;
+            const estDate = document.getElementById('startEstDate').value;
+            const comment = document.getElementById('startComment').value;
+            
+            // Texto del estado según la pestaña actual
+            let estadoNuevo = "En Proceso"; // Default
+            if (this.currentTab === 'Planta') estadoNuevo = "En Fabricación";
+            if (this.currentTab === 'Bodega') estadoNuevo = "En Preparación Bodega";
+            if (this.currentTab === 'Despacho') estadoNuevo = "En Preparación Despacho";
 
-    let obsText = ""; 
-    if(comment) obsText = `Inicio: ${comment}`; 
-    if(estDate) obsText += ` (Entrega est: ${estDate})`;
-    
-    this.updateStatus(id, estadoNuevo, obsText);
-    
-    if(estDate) db.ref('solicitudes/'+id).update({ fechaEntregaEstimada: estDate });
-    bootstrap.Modal.getInstance(document.getElementById('startModal')).hide();
-},
+            let obsText = ""; 
+            if(comment) obsText = `Inicio: ${comment}`; 
+            if(estDate) obsText += ` (Entrega est: ${estDate})`;
+            
+            this.updateStatus(id, estadoNuevo, obsText);
+            
+            if(estDate) db.ref('solicitudes/'+id).update({ fechaEntregaEstimada: estDate });
+            bootstrap.Modal.getInstance(document.getElementById('startModal')).hide();
+        },
+        
+        openFinishModal: function(id) { 
+            document.getElementById('finishIdTarget').value = id; 
+            document.getElementById('finishComment').value = 'Finalizado OK'; 
+            new bootstrap.Modal(document.getElementById('finishModal')).show(); 
+        },
+        confirmFinishItem: function() {
+            const id = document.getElementById('finishIdTarget').value;
+            let comment = document.getElementById('finishComment').value.trim();
+            if (!comment) comment = 'Finalizado OK';
+            
+            this.updateStatus(id, 'Entregado', comment);
+            bootstrap.Modal.getInstance(document.getElementById('finishModal')).hide();
+        },
         
         // --- PAPELERA ---
         deleteCloud: function(id) { 
@@ -979,11 +1013,11 @@ viewDetails: function(id) {
     let buttonsHtml = '';
     if (item.deleted) {
         if (this.currentUser.role === 'admin' || this.currentUser.role === 'bodega') {
-            buttonsHtml = `<button class="btn btn-success w-100 mt-3 shadow-lg fw-bold py-2" onclick="app.restoreItem('${id}'); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();"><i class="fas fa-trash-restore me-2"></i>RESTAURAR SOLICITUD</button>`;
+            buttonsHtml = `<button class="btn-success w-100 mt-3 shadow-lg fw-bold py-2" onclick="app.restoreItem('${id}'); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();"><i class="fas fa-trash-restore me-2"></i>RESTAURAR SOLICITUD</button>`;
         }
     } else {
         if((this.currentUser.role==='bodega' || this.currentUser.role==='operaciones') && item.estado.includes('espera')) {
-            buttonsHtml += `<button class="btn btn-warning w-100 mt-3 shadow-sm fw-bold" onclick="app.replyInfo('${id}')"><i class="fas fa-reply me-2"></i>Responder Solicitud</button>`;
+            buttonsHtml += `<button class="btn-warning w-100 mt-3 shadow-sm fw-bold" onclick="app.replyInfo('${id}')"><i class="fas fa-reply me-2"></i>Responder Solicitud</button>`;
         }
         buttonsHtml += `<button class="btn btn-sm btn-outline-danger mt-3 w-100" onclick="app.generatePDF(app.data['${id}'])"><i class="fas fa-file-pdf me-2"></i>Descargar Comprobante PDF</button>`;
     }
@@ -1175,7 +1209,7 @@ forceStatusChange: function(id) {
                         if(s.includes('pendiente') || s.includes('solicitud') || s.includes('enviada') || s.includes('espera')) {
                             btns += `<button class="btn-icon btn-play ms-1" onclick="app.openStartModal('${item.id}')" title="Iniciar"><i class="fas fa-play"></i></button>`;
                         } else if(s.includes('fabric') || s.includes('proceso') || s.includes('prepara')) {
-                            btns += `<button class="btn-icon ms-1" style="background-color: #10b981; color: white;" onclick="app.updateStatus('${item.id}', 'Entregado', 'Finalizado OK')" title="Finalizar"><i class="fas fa-check"></i></button>`;
+                            btns += `<button class="btn-icon ms-1" style="background-color: #10b981; color: white;" onclick="app.openFinishModal('${item.id}')" title="Finalizar"><i class="fas fa-check"></i></button>`;
                         }
                         if(!s.includes('entregado') && !s.includes('terminado')) {
                             btns += `<button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')" title="Duda"><i class="fas fa-question"></i></button>`;
