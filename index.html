@@ -533,13 +533,24 @@ setCurrentUser: function(u) {
         },
 
         // --- FORMULARIOS Y CATALOGO ---
-        renderCatalog: function() {
+renderCatalog: function() {
             const dl = document.getElementById('catalogOptions'); dl.innerHTML = '';
             const list = Object.values(this.products);
+            
+            // Función interna para arreglar textos dañados antiguos
+            const fixText = (text) => text ? text.replace(/ÿÿ/g, 'Ó').replace(/Ã‘/g, 'Ñ').replace(/Ã“/g, 'Ó') : '';
+
             document.getElementById('catalogStatus').innerHTML = `<i class="fas fa-check-circle text-success"></i> ${list.length} productos`;
             if(document.getElementById('prodCountBadge')) document.getElementById('prodCountBadge').innerText = `${list.length}`;
-            list.forEach(p => { const o = document.createElement('option'); o.value = p.nombre; o.innerText = `SKU: ${p.sku}`; dl.appendChild(o); });
+            
+            list.forEach(p => { 
+                const o = document.createElement('option'); 
+                o.value = fixText(p.nombre); // Limpiamos el nombre antes de ponerlo en el buscador
+                o.innerText = `SKU: ${p.sku}`; 
+                dl.appendChild(o); 
+            });
         },
+
         addItemRow: function(data = null) {
             const id = Date.now() + Math.random().toString().slice(2,5);
             const div = document.createElement('div'); div.className = 'd-flex gap-2 mb-2 item-row align-items-center animate__animated animate__fadeIn'; div.id = `r-${id}`;
@@ -867,25 +878,147 @@ setCurrentUser: function(u) {
             }));
             const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Solicitudes"); XLSX.writeFile(wb, "Reporte_Maquipan.xlsx");
         },
+
         generatePDF: function(item) {
-            const { jsPDF } = window.jspdf; const doc = new jsPDF();
-            doc.setFillColor(44, 62, 80); doc.rect(0, 0, 210, 20, 'F');
-            doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.text("COMPROBANTE DE ENTREGA", 105, 13, null, null, "center");
-            doc.setTextColor(0, 0, 0); doc.setFontSize(12); doc.text("MAQUIPAN LTDA", 20, 35);
-            doc.setFontSize(10); 
-            doc.text(`Folio: ${item.folio||item.id}`, 150, 35); 
-            doc.text(`Fecha Solicitud: ${this.formatDate(item.fechaSolicitud)}`, 150, 40); 
-            doc.text(`Destino: ${item.destino || 'Planta'}`, 150, 45); // Muestra el destino en el PDF
-            doc.text(`Cliente: ${item.local}`, 20, 45); doc.text(`Nota Venta: ${item.notaVenta}`, 20, 50);
+            const { jsPDF } = window.jspdf; 
+            const doc = new jsPDF();
             
-            doc.autoTable({ startY: 60, head: [['SKU', 'Producto', 'Cant']], body: item.items.map(i => [i.sku, i.producto, i.cantidad]), theme: 'grid', headStyles: { fillColor: [44, 62, 80] } });
-            const y = doc.lastAutoTable.finalY + 40;
-            doc.line(20, y, 90, y); doc.text("Recibí Conforme", 25, y+5); doc.line(120, y, 190, y); doc.text("Firma Responsable", 125, y+5);
-            doc.save(`Entrega_${item.folio||item.id}.pdf`);
+            // --- ENCABEZADO ---
+            doc.setFillColor(44, 62, 80); 
+            doc.rect(0, 0, 210, 20, 'F');
+            doc.setTextColor(255, 255, 255); 
+            doc.setFontSize(16); 
+            doc.text("COMPROBANTE DE SOLICITUD / ENTREGA", 105, 13, null, null, "center");
+            
+            // --- INFORMACIÓN GENERAL (Izquierda) ---
+            doc.setTextColor(0, 0, 0); 
+            doc.setFontSize(12); 
+            doc.setFont("helvetica", "bold");
+            doc.text("MAQUIPAN", 20, 30);
+            
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(10); 
+            doc.text(`Cliente / Local: ${item.local || '--'}`, 20, 40); 
+            doc.text(`Nota Venta: ${item.notaVenta || '--'}`, 20, 45);
+            doc.text(`Estado Actual: ${item.estado || '--'}`, 20, 50);
+            doc.text(`Prioridad: ${item.prioridad || 'Normal'}`, 20, 55);
+            
+            // --- INFORMACIÓN GENERAL (Derecha) ---
+            doc.text(`Folio: ${item.folio || item.id}`, 125, 30); 
+            doc.text(`Fecha Solicitud: ${this.formatDate(item.fechaSolicitud)}`, 125, 35); 
+            doc.text(`Fecha Requerida: ${item.fechaReq || '--'}`, 125, 40);
+            
+            let yRight = 45;
+            if (item.fechaEntregaEstimada) {
+                doc.text(`Entrega Estimada: ${item.fechaEntregaEstimada}`, 125, yRight);
+                yRight += 5;
+            }
+            doc.text(`Destino: ${item.destino || 'Planta'}`, 125, yRight);
+
+            // --- OBSERVACIONES GENERALES ---
+            let startYTable = 65;
+            if (item.observaciones) {
+                doc.setFont("helvetica", "bold");
+                doc.text("Observaciones:", 20, 65);
+                doc.setFont("helvetica", "normal");
+                
+                const splitObs = doc.splitTextToSize(item.observaciones, 170);
+                doc.text(splitObs, 20, 70);
+                startYTable = 70 + (splitObs.length * 5) + 5; 
+            }
+
+            // Función para limpiar texto y forzar espacios si no los hay
+            const cleanText = (text) => {
+                if (!text) return '';
+                let cleaned = text.toString().replace(/\s+/g, ' ').trim();
+                // Parche rápido para el error de codificación del catálogo
+                cleaned = cleaned.replace(/ÿÿ/g, 'Ó');
+                return cleaned;
+            };
+
+            // --- 1. TABLA DE PRODUCTOS (BLINDADA) ---
+            doc.autoTable({ 
+                startY: startYTable, 
+                head: [['SKU', 'Producto', 'Cant']], 
+                body: item.items.map(i => [i.sku || 'S/N', cleanText(i.producto), i.cantidad]), 
+                theme: 'grid', 
+                headStyles: { fillColor: [44, 62, 80], halign: 'center' },
+                styles: { 
+                    fontSize: 8, 
+                    cellPadding: 3, 
+                    overflow: 'linebreak', 
+                    valign: 'middle'
+                }, 
+                margin: { left: 20, right: 20 }, 
+                tableWidth: 170, // <-- CANDADO: Prohíbe que la tabla sea más ancha que los márgenes
+                columnStyles: {
+                    0: { cellWidth: 35, halign: 'center' }, 
+                    1: { cellWidth: 115 },                  
+                    2: { cellWidth: 20, halign: 'center' }  
+                }
+            });
+
+            // --- 2. AUDITORÍA Y BITÁCORA ---
+            let currentY = doc.lastAutoTable.finalY + 10;
+            
+            if (item.historial && item.historial.length > 0) {
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(11);
+                doc.text("Auditoría y Bitácora:", 20, currentY);
+                
+                const stripHTML = (html) => { 
+                    if(!html) return "";
+                    let tmp = document.createElement("DIV"); 
+                    tmp.innerHTML = html; 
+                    return (tmp.textContent || tmp.innerText || "").trim();
+                };
+
+                const historialBody = item.historial.map(h => [
+                    this.formatDate(h.fecha),
+                    h.usuario || 'Sistema',
+                    h.estado,
+                    stripHTML(h.nota)
+                ]);
+
+                doc.autoTable({
+                    startY: currentY + 5,
+                    head: [['Fecha', 'Usuario', 'Estado', 'Detalle / Comentario']],
+                    body: historialBody,
+                    theme: 'grid',
+                    headStyles: { fillColor: [100, 116, 139] }, 
+                    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+                    margin: { left: 20, right: 20 },
+                    tableWidth: 170, // <-- CANDADO para la segunda tabla
+                    columnStyles: { 
+                        0: { cellWidth: 30 }, 
+                        1: { cellWidth: 30 }, 
+                        2: { cellWidth: 35 }, 
+                        3: { cellWidth: 75 } 
+                    } 
+                });
+                
+                currentY = doc.lastAutoTable.finalY + 20;
+            } else {
+                currentY += 20; 
+            }
+
+            // --- ZONA DE FIRMAS ---
+            if (currentY > 260) {
+                doc.addPage();
+                currentY = 40;
+            }
+
+            doc.line(20, currentY, 90, currentY); 
+            doc.text("Recibí Conforme", 25, currentY + 5); 
+            doc.line(120, currentY, 190, currentY); 
+            doc.text("Firma Responsable", 125, currentY + 5);
+            
+            // --- GUARDAR ARCHIVO ---
+            doc.save(`Solicitud_${item.folio || item.id}.pdf`);
         },
 
         // --- IMPORTAR / MIGRACIÓN ---
-        importRequests: function() { 
+importRequests: function() { 
             const file = document.getElementById('jsonReqInput').files[0]; if(!file) return;
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -906,8 +1039,10 @@ setCurrentUser: function(u) {
                     if(c>0) db.ref('solicitudes').update(updates).then(() => this.showToast(`Migradas ${c} solicitudes`));
                 } catch(err) { alert("Error JSON: " + err.message); }
             };
-            reader.readAsText(file);
+            // AQUÍ ESTÁ LA MAGIA: Forzamos la lectura en formato latino/Windows
+            reader.readAsText(file, 'ISO-8859-1'); 
         },
+        
         importProducts: function() {
             const file = document.getElementById('jsonProdInput').files[0]; if(!file) return;
             const reader = new FileReader();
@@ -916,11 +1051,23 @@ setCurrentUser: function(u) {
                     const json = JSON.parse(e.target.result);
                     let updates = {}; let c=0;
                     const items = Array.isArray(json) ? json : Object.values(json);
-                    items.forEach(p => { if(p.nombre) { const key = p.sku ? String(p.sku).replace(/[.#$/[\]]/g, "-") : (p.id || Date.now()); updates[key] = {sku:p.sku||"S/N", nombre:p.nombre.toUpperCase(), categoria:p.categoria||"General", stock:p.stock||0}; c++; }});
+                    items.forEach(p => { 
+                        if(p.nombre) { 
+                            const key = p.sku ? String(p.sku).replace(/[.#$/[\]]/g, "-") : (p.id || Date.now()); 
+                            updates[key] = {
+                                sku: p.sku || "S/N", 
+                                nombre: p.nombre.toUpperCase(), 
+                                categoria: p.categoria || "General", 
+                                stock: p.stock || 0
+                            }; 
+                            c++; 
+                        }
+                    });
                     db.ref('inventario').update(updates).then(()=>this.showToast(`Cargados ${c} productos`));
                 } catch(err) { alert("Error JSON"); }
             };
-            reader.readAsText(file);
+            // AQUÍ ESTÁ LA MAGIA: Forzamos la lectura en formato latino/Windows
+            reader.readAsText(file, 'ISO-8859-1');
         },
 
         // --- UTILIDADES ---
