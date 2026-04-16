@@ -310,19 +310,56 @@
         </button>
     </div>
 </div>
-                <div class="col-md-6">
-                    <div class="card p-4 h-100 border-0 shadow-sm glass">
-                        <h6 class="fw-bold"><i class="fas fa-boxes me-2 text-success"></i>Cargar Catálogo</h6>
-                        <p class="small text-muted">Actualiza la lista de productos.</p>
-                        <div class="d-flex gap-2 mt-auto">
-                            <input type="file" id="jsonProdInput" class="d-none" accept=".json" onchange="app.importProducts()">
-                            <button class="btn btn-success text-white w-100 fw-bold" onclick="document.getElementById('jsonProdInput').click()">Cargar Inventario</button>
-                            <span id="prodCountBadge" class="badge bg-white text-dark border align-self-center">0</span>
-                        </div>
+
+<div class="col-md-6">
+    <div class="card p-4 h-100 border-0 shadow-sm glass">
+        <h6 class="fw-bold"><i class="fas fa-boxes me-2 text-success"></i>Cargar Catálogo</h6>
+        <p class="small text-muted">Actualiza la lista de productos.</p>
+        <div class="d-flex gap-2 mt-auto">
+            <input type="file" id="jsonProdInput" class="d-none" accept=".json" onchange="app.importProducts()">
+            <button class="btn btn-success text-white w-100 fw-bold" onclick="document.getElementById('jsonProdInput').click()">Cargar Inventario</button>
+            <span id="prodCountBadge" class="badge bg-white text-dark border align-self-center">0</span>
+        </div>
+    </div>
+</div>
+
+<div class="col-12 mt-3">
+    <div class="card p-4 border-0 shadow-sm glass">
+        <h6 class="fw-bold"><i class="fas fa-plus-square me-2 text-primary"></i>Agregar Producto Individual al Catálogo</h6>
+        <p class="small text-muted mb-3">Añade un nuevo repuesto o producto manualmente sin necesidad de cargar un archivo JSON.</p>
+        
+        <form id="formAddProduct" onsubmit="app.addSingleProduct(event)">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        <input type="text" class="form-control" id="newProdSku" placeholder="." required>
+                        <label>SKU / Código</label>
                     </div>
                 </div>
+                <div class="col-md-4">
+                    <div class="form-floating">
+                        <input type="text" class="form-control" id="newProdName" placeholder="." required>
+                        <label>Nombre del Producto</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-floating">
+                        <input type="text" class="form-control" id="newProdCat" placeholder="." value="General">
+                        <label>Categoría</label>
+                    </div>
+                </div>
+                <div class="col-md-2 h-100">
+                    <button type="submit" class="btn btn-primary w-100 fw-bold" style="height: 58px;">
+                        <i class="fas fa-save me-2"></i>Guardar
+                    </button>
+                </div>
             </div>
-        </div>
+        </form>
+    </div>
+</div>
+</div> </div> ```
+
+Con esto, el nuevo formulario quedará perfectamente alineado debajo de las opciones de administrador actuales, ocupando todo el ancho disponible (`col-12`) de manera armónica.
         
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-3">
             <h5 class="mb-0 fw-bold text-secondary"><i class="fas fa-list-ul me-2"></i>Listado en Vivo</h5>
@@ -1068,6 +1105,38 @@ importRequests: function() {
             };
             // AQUÍ ESTÁ LA MAGIA: Forzamos la lectura en formato latino/Windows
             reader.readAsText(file, 'ISO-8859-1');
+        },
+
+// --- NUEVO: AGREGAR PRODUCTO INDIVIDUAL ---
+        addSingleProduct: function(e) {
+            e.preventDefault();
+            
+            const sku = document.getElementById('newProdSku').value.trim();
+            const nombre = document.getElementById('newProdName').value.trim().toUpperCase();
+            const categoria = document.getElementById('newProdCat').value.trim() || "General";
+
+            if (!sku || !nombre) return alert("El SKU y el Nombre son obligatorios");
+
+            // Firebase no permite ciertos caracteres en las llaves, así que sanitizamos el SKU
+            const key = sku.replace(/[.#$/[\]]/g, "-"); 
+
+            const newProduct = {
+                sku: sku,
+                nombre: nombre,
+                categoria: categoria,
+                stock: 0 
+            };
+
+            const updates = {};
+            updates[key] = newProduct;
+
+            db.ref('inventario').update(updates)
+            .then(() => {
+                this.showToast(`Producto agregado: ${nombre}`, 'success');
+                document.getElementById('formAddProduct').reset();
+                document.getElementById('newProdCat').value = "General"; // Restaurar valor por defecto
+            })
+            .catch(err => alert("Error al guardar el producto: " + err.message));
         },
 
         // --- UTILIDADES ---
