@@ -157,6 +157,8 @@
         .bg-st-proceso { background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe; }
         .bg-st-espera { background: #fef2f2; color: #b91c1c; border: 1px solid #fee2e2; }
         .bg-st-terminado { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+	.strip-insumo { background-color: #8b5cf6; }
+        .bg-st-insumo { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
         .bg-secondary { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; } /* Para eliminados */
 
         /* Inputs de Fecha en la barra de filtros */
@@ -394,7 +396,8 @@
                         <option value="">Todo</option>
                         <option value="bodega">🟠 Pendiente</option>
                         <option value="fabricación">🔵 En Taller</option>
-                        <option value="espera">🔴 Dudas</option>
+                        <option value="insumo">🟣 Falta Insumo</option> 
+			<option value="espera">🔴 Dudas</option>
                         <option value="terminado">🟢 Listo</option>
                         <option value="eliminado" class="text-danger fw-bold">🗑️ Papelera</option>
                     </select>
@@ -895,6 +898,12 @@ renderCatalog: function() {
             this.updateStatus(id, 'Entregado', comment);
             bootstrap.Modal.getInstance(document.getElementById('finishModal')).hide();
         },
+	setPendingSupply: function(id) {
+            const obs = prompt("Indique qué insumo falta o detale el problema:");
+            if(obs) {
+                this.updateStatus(id, "Pendiente de Insumo", `Falta insumo: ${obs}`);
+            }
+        },
         
         // --- PAPELERA ---
         deleteCloud: function(id) { 
@@ -1281,7 +1290,7 @@ importRequests: function() {
             const c = (t) => l.filter(i=>(i.estado||"").toLowerCase().includes(t)).length;
             this.animateValue('kpi-pending', c('bodega')+c('pendiente'));
             this.animateValue('kpi-process', c('fabricación')+c('proceso'));
-            this.animateValue('kpi-waiting', c('espera')+c('duda'));
+            this.animateValue('kpi-waiting', c('espera')+c('duda')+c('insumo')); // Insumo añadido aquí
             this.animateValue('kpi-done', c('entregado')+c('terminado'));
         },
         formatDate: function(isoString) {
@@ -1346,13 +1355,24 @@ viewDetails: function(id) {
     // --- CONTROL DE ESTADO PARA ADMIN ---
     let statusDisplay = `<span class="badge bg-dark">${item.estado}</span>`;
     if (this.currentUser.role === 'admin' && !item.deleted) {
-        const estados = ["Solicitud enviada", "En Fabricación", "En Preparación Bodega", "En Preparación Despacho", "En espera de información", "Terminado", "Entregado"];
+        // Se agregó "Pendiente de Insumo" al array
+        const estados = ["Solicitud enviada", "En Fabricación", "En Preparación Bodega", "En Preparación Despacho", "Pendiente de Insumo", "En espera de información", "Terminado", "Entregado"];
         let options = estados.map(e => `<option value="${e}" ${item.estado === e ? 'selected' : ''}>${e}</option>`).join('');
         statusDisplay = `
             <div class="input-group input-group-sm justify-content-end" style="width: 240px;">
                 <select id="adminStatusSelect" class="form-select form-select-sm fw-bold text-primary border-primary">${options}</select>
                 <button class="btn btn-primary" onclick="app.forceStatusChange('${id}')" title="Guardar Estado"><i class="fas fa-save"></i></button>
             </div>`;
+    }
+
+    // --- NUEVO: MOSTRAR FECHA REAL DE ENTREGA ---
+    let entregaDetalle = '';
+    if (item.estado.toLowerCase().includes('entregado') || item.estado.toLowerCase().includes('terminado')) {
+        // Busca en el historial el momento exacto en que pasó a "Entregado" o "Terminado"
+        const histEntrega = (item.historial || []).slice().reverse().find(h => h.estado.toLowerCase().includes('entregado') || h.estado.toLowerCase().includes('terminado'));
+        if (histEntrega) {
+            entregaDetalle = `<div class="alert alert-success mt-2 py-2 mb-0 border-0 text-start small"><i class="fas fa-calendar-check me-2"></i><strong>Entregado el:</strong> ${this.formatDate(histEntrega.fecha)}</div>`;
+        }
     }
 
     // --- RENDERIZAR PANEL DE EVIDENCIAS FOTOGRÁFICAS ---
@@ -1400,6 +1420,7 @@ viewDetails: function(id) {
             <div class="text-end">
                 <span class="badge ${item.prioridad==='Urgente'?'bg-danger':'bg-info'} mb-1">${item.prioridad||'Normal'}</span><br>
                 ${statusDisplay}
+		${entregaDetalle}
             </div>
         </div>
         <h6 class="small text-muted fw-bold border-bottom pb-2 mb-3">DESTINO: <span class="text-primary">${item.destino || 'Planta'}</span></h6>
@@ -1504,19 +1525,23 @@ forceStatusChange: function(id) {
                 // CREADOR
                 const creador = (item.historial && item.historial.length > 0) ? item.historial[0].usuario : "Desconocido";
 
-                let strip='strip-pendiente', badge='bg-st-pendiente', icon='<i class="far fa-clock"></i>';
-                const s = (item.estado||"").toLowerCase();
-                
-                if(s.includes('fabricación')||s.includes('proceso')||s.includes('prepara')||s.includes('taller')) { 
-                    strip='strip-proceso'; badge='bg-st-proceso'; icon='<i class="fas fa-hammer"></i>'; 
-                }
-                if(s.includes('espera')||s.includes('duda')) { 
-                    strip='strip-espera'; badge='bg-st-espera'; icon='<i class="fas fa-exclamation-triangle"></i>'; 
-                }
-                if(s.includes('terminado')||s.includes('entregado')||s.includes('listo')) { 
-                    strip='strip-terminado'; badge='bg-st-terminado'; icon='<i class="fas fa-check"></i>'; 
-                }
-                if(item.deleted) { strip='bg-secondary'; badge='bg-secondary'; icon='<i class="fas fa-trash"></i>'; }
+		let strip='strip-pendiente', badge='bg-st-pendiente', icon='<i class="far fa-clock"></i>';
+            const s = (item.estado||"").toLowerCase();
+
+            if(s.includes('fabricación')||s.includes('proceso')||s.includes('prepara')||s.includes('taller')) { 
+                strip='strip-proceso'; badge='bg-st-proceso'; icon='<i class="fas fa-hammer"></i>'; 
+            }
+            if(s.includes('espera')||s.includes('duda')) { 
+                strip='strip-espera'; badge='bg-st-espera'; icon='<i class="fas fa-exclamation-triangle"></i>'; 
+            }
+            // NUEVO ESTADO: INSUMO
+            if(s.includes('insumo')) { 
+                strip='strip-insumo'; badge='bg-st-insumo'; icon='<i class="fas fa-box-open"></i>'; 
+            }
+            if(s.includes('terminado')||s.includes('entregado')||s.includes('listo')) { 
+                strip='strip-terminado'; badge='bg-st-terminado'; icon='<i class="fas fa-check"></i>'; 
+            }
+            if(item.deleted) { strip='bg-secondary'; badge='bg-secondary'; icon='<i class="fas fa-trash"></i>'; }
 
                 let urgentClass = (item.prioridad === 'Urgente' && !s.includes('entregado') && !item.deleted) ? 'card-urgente' : '';
                 let urgentBadge = (item.prioridad === 'Urgente') ? '<span class="priority-badge">🔥 URGENTE</span>' : '';
@@ -1540,39 +1565,55 @@ forceStatusChange: function(id) {
                     if (this.currentUser.role === 'despacho' && this.currentTab === 'Despacho') esMiArea = true;
 
                     if (esMiArea) {
-                        if(s.includes('pendiente') || s.includes('solicitud') || s.includes('enviada') || s.includes('espera')) {
-                            btns += `<button class="btn-icon btn-play ms-1" onclick="app.openStartModal('${item.id}')" title="Iniciar"><i class="fas fa-play"></i></button>`;
-                        } else if(s.includes('fabric') || s.includes('proceso') || s.includes('prepara')) {
-                            btns += `<button class="btn-icon ms-1" style="background-color: #10b981; color: white;" onclick="app.openFinishModal('${item.id}')" title="Finalizar"><i class="fas fa-check"></i></button>`;
-                        }
-                        if(!s.includes('entregado') && !s.includes('terminado')) {
-                            btns += `<button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')" title="Duda"><i class="fas fa-question"></i></button>`;
-                        }
+                    if(s.includes('pendiente') || s.includes('solicitud') || s.includes('enviada') || s.includes('espera')) {
+                        btns += `<button class="btn-icon btn-play ms-1" onclick="app.openStartModal('${item.id}')" title="Iniciar"><i class="fas fa-play"></i></button>`;
+                    } else if(s.includes('fabric') || s.includes('proceso') || s.includes('prepara') || s.includes('insumo')) {
+                        btns += `<button class="btn-icon ms-1" style="background-color: #10b981; color: white;" onclick="app.openFinishModal('${item.id}')" title="Finalizar"><i class="fas fa-check"></i></button>`;
                     }
 
-                    const soyCreador = creador.includes(this.currentUser.name) || (this.currentUser.role === 'operaciones' && creador.includes('Operaciones'));
-                    
-                    if (this.currentUser.role === 'admin' || (soyCreador && !s.includes('proceso') && !s.includes('entregado'))) {
-                        btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')"><i class="fas fa-pen"></i></button>`;
-                        btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
+                    // NUEVO BOTÓN: PENDIENTE DE INSUMO
+                    if(!s.includes('entregado') && !s.includes('terminado') && !s.includes('insumo')) {
+                        btns += `<button class="btn-icon ms-1" style="background:#8b5cf6; color:white;" onclick="app.setPendingSupply('${item.id}')" title="Falta Insumo"><i class="fas fa-box-open"></i></button>`;
+                    }
+
+                    if(!s.includes('entregado') && !s.includes('terminado')) {
+                        btns += `<button class="btn-icon btn-warn ms-1" onclick="app.askInfo('${item.id}')" title="Duda"><i class="fas fa-question"></i></button>`;
                     }
                 }
-               
-                let itemsHtml = item.items && item.items.length ? `<div class="svc-item-list"><span class="badge bg-dark rounded-pill">${item.items[0].cantidad}</span> ${item.items[0].producto}</div>` : '';
-                if(item.items && item.items.length > 1) itemsHtml += `<small class="text-muted">+${item.items.length-1} más...</small>`;
-                let entregaHtml = item.fechaEntregaEstimada ? `<div class="text-primary small mt-1"><i class="fas fa-shipping-fast"></i> Entrega: ${item.fechaEntregaEstimada}</div>` : '';
-                
-                const delay = index * 0.05; 
-                container.innerHTML += `<div class="service-card glass ${urgentClass}" style="animation-delay: ${delay}s"><div class="status-strip ${strip}"></div><div class="service-content"><div class="col-id"><div class="date-display">${this.formatDate(item.fechaSolicitud).split(' ')[0]}</div><span class="folio-tag">${item.folio || 'S/N'}</span>${urgentBadge}${atrasadoBadge}<br><span class="badge bg-light text-dark border mt-1">NV-${item.notaVenta}</span></div><div class="col-main"><div class="fw-bold">${item.local}</div><div class="text-muted small">Req: ${item.fechaReq||'--'}</div>${entregaHtml}</div><div class="col-items">${itemsHtml}</div><div class="col-actions"><span class="status-badge ${badge}">${icon} ${item.estado}</span><div class="mt-2">${btns}</div></div></div></div>`;
-            });
 
-            document.getElementById('pageInfo').innerText = `Página ${this.currentPage} de ${totalPages}`;
-            document.getElementById('btnPrev').disabled = this.currentPage <= 1;
-            document.getElementById('btnNext').disabled = this.currentPage >= totalPages;
-        },
-    };
-    window.app = app;
-    document.addEventListener('DOMContentLoaded', () => app.init());
+                const soyCreador = creador.includes(this.currentUser.name) || (this.currentUser.role === 'operaciones' && creador.includes('Operaciones'));
+
+                if (this.currentUser.role === 'admin' || (soyCreador && !s.includes('proceso') && !s.includes('entregado'))) {
+                    btns += `<button class="btn-icon btn-edit ms-1" onclick="app.loadForEdit('${item.id}')"><i class="fas fa-pen"></i></button>`;
+                    btns += `<button class="btn-icon btn-del ms-1" onclick="app.deleteCloud('${item.id}')"><i class="fas fa-trash"></i></button>`;
+                }
+            }
+
+            let itemsHtml = item.items && item.items.length ? `<div class="svc-item-list"><span class="badge bg-dark rounded-pill">${item.items[0].cantidad}</span> ${item.items[0].producto}</div>` : '';
+            if(item.items && item.items.length > 1) itemsHtml += `<small class="text-muted">+${item.items.length-1} más...</small>`;
+
+            // NUEVA LÓGICA DE FECHA DE ENTREGA
+            let entregaHtml = item.fechaEntregaEstimada ? `<div class="text-primary small mt-1"><i class="fas fa-shipping-fast"></i> Est: ${item.fechaEntregaEstimada}</div>` : '';
+
+            if (s.includes('entregado') || s.includes('terminado')) {
+                const histEntrega = (item.historial || []).slice().reverse().find(h => h.estado.toLowerCase().includes('entregado') || h.estado.toLowerCase().includes('terminado'));
+                if (histEntrega) {
+                    entregaHtml = `<div class="text-success small mt-1 fw-bold"><i class="fas fa-calendar-check"></i> Entregado: ${this.formatDate(histEntrega.fecha).split(' ')[0]}</div>`;
+                }
+            }
+            
+            const delay = index * 0.05; 
+            container.innerHTML += `<div class="service-card glass ${urgentClass}" style="animation-delay: ${delay}s"><div class="status-strip ${strip}"></div><div class="service-content"><div class="col-id"><div class="date-display">${this.formatDate(item.fechaSolicitud).split(' ')[0]}</div><span class="folio-tag">${item.folio || 'S/N'}</span>${urgentBadge}${atrasadoBadge}<br><span class="badge bg-light text-dark border mt-1">NV-${item.notaVenta}</span></div><div class="col-main"><div class="fw-bold">${item.local}</div><div class="text-muted small">Req: ${item.fechaReq||'--'}</div>${entregaHtml}</div><div class="col-items">${itemsHtml}</div><div class="col-actions"><span class="status-badge ${badge}">${icon} ${item.estado}</span><div class="mt-2">${btns}</div></div></div></div>`;
+        });
+
+        document.getElementById('pageInfo').innerText = `Página ${this.currentPage} de ${totalPages}`;
+        document.getElementById('btnPrev').disabled = this.currentPage <= 1;
+        document.getElementById('btnNext').disabled = this.currentPage >= totalPages;
+    }
+}; // <-- Esta es la llave que faltaba para cerrar el objeto app
+
+window.app = app;
+document.addEventListener('DOMContentLoaded', () => app.init());
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
