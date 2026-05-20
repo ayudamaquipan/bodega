@@ -373,7 +373,18 @@
         </form>
     </div>
 </div>
-</div> </div> 
+
+<div class="col-12 mt-3">
+    <div class="card p-4 border-0 shadow-sm glass" style="border-left: 4px solid #0dcaf0 !important;">
+        <h6 class="fw-bold"><i class="fas fa-stopwatch me-2 text-info"></i>Reporte de Tiempos de Fabricación</h6>
+        <p class="small text-muted mb-3">Calcula la demora exacta en Días y Horas desde que se genera la solicitud hasta que se presiona "Finalizar".</p>
+        <button class="btn btn-info text-white w-100 fw-bold shadow-sm" onclick="app.generarReporteTiempos()">
+            <i class="fas fa-file-excel me-2"></i>Descargar Excel de Tiempos
+        </button>
+    </div>
+</div>
+
+</div> </div>
         
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-3">
             <h5 class="mb-0 fw-bold text-secondary"><i class="fas fa-list-ul me-2"></i>Listado en Vivo</h5>
@@ -1011,13 +1022,111 @@ renderCatalog: function() {
         },
 
         // --- EXPORTAR Y PDF ---
+        // --- EXPORTAR Y PDF ---
         exportToExcel: function() {
-            const data = Object.values(this.data).map(i => ({ 
-                Folio: i.folio||i.id, Fecha: this.formatDate(i.fechaSolicitud), Destino: i.destino||'Planta',
-                Local: i.local, NV: i.notaVenta, Estado: i.estado, Prioridad: i.prioridad||'Normal', 
-                Items: i.items.map(x => `${x.cantidad}x ${x.producto}`).join(', ') 
-            }));
+            const data = Object.values(this.data).map(i => {
+                const s = (i.estado || "").toLowerCase();
+                let fechaEntregado = "--";
+                
+                // Busca en el historial el momento exacto en que pasó a "Entregado" o "Terminado"
+                if (s.includes('entregado') || s.includes('terminado')) {
+                    const histEntrega = (i.historial || []).slice().reverse().find(h => h.estado.toLowerCase().includes('entregado') || h.estado.toLowerCase().includes('terminado'));
+                    if (histEntrega) {
+                        fechaEntregado = this.formatDate(histEntrega.fecha);
+                    }
+                }
+
+                return { 
+                    Folio: i.folio || i.id, 
+                    Fecha_Solicitud: this.formatDate(i.fechaSolicitud), 
+                    Fecha_Requerida: i.fechaReq || '--',
+                    Fecha_Entregado: fechaEntregado, // NUEVA COLUMNA
+                    Destino: i.destino || 'Planta',
+                    Local: i.local, 
+                    NV: i.notaVenta, 
+                    Estado: i.estado, 
+                    Prioridad: i.prioridad || 'Normal', 
+                    Items: i.items.map(x => `${x.cantidad}x ${x.producto}`).join(', ') 
+                };
+            });
             const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Solicitudes"); XLSX.writeFile(wb, "Reporte_Maquipan.xlsx");
+        },
+generarReporteTiempos: function() {
+            if (!this.data) return this.showToast("No hay datos para analizar", "warning");
+
+            const statsByProduct = {};
+            const detalleOrdenes = [];
+
+            Object.values(this.data).forEach(req => {
+                const s = (req.estado || "").toLowerCase();
+                
+                // Solo evaluamos los que ya pasaron por todo el ciclo (Entregado/Terminado)
+                if (s.includes('entregado') || s.includes('terminado')) {
+                    // Buscar la fecha exacta en la que se cerró
+                    const histEntrega = (req.historial || []).slice().reverse().find(h => h.estado.toLowerCase().includes('entregado') || h.estado.toLowerCase().includes('terminado'));
+
+                    if (histEntrega && req.fechaSolicitud) {
+                        const dStart = new Date(req.fechaSolicitud);
+                        const dEnd = new Date(histEntrega.fecha);
+                        
+                        // Diferencia en tiempo real
+                        const diffMs = Math.abs(dEnd - dStart);
+                        const diffDias = diffMs / (1000 * 60 * 60 * 24);
+                        const diffHoras = diffMs / (1000 * 60 * 60);
+
+                        // 1. Guardamos el detalle general de la orden
+                        detalleOrdenes.push({
+                            Folio: req.folio || req.id,
+                            Local: req.local,
+                            'Fecha Solicitud': this.formatDate(req.fechaSolicitud),
+                            'Fecha Entrega': this.formatDate(histEntrega.fecha),
+                            'Demora (Días)': parseFloat(diffDias.toFixed(2)),
+                            'Demora (Horas)': parseFloat(diffHoras.toFixed(1))
+                        });
+
+                        // 2. Acumulamos las estadísticas por cada producto dentro de esa orden
+                        if (req.items && Array.isArray(req.items)) {
+                            req.items.forEach(item => {
+                                const sku = item.sku || 'S/N';
+                                const nombre = item.producto || 'Desconocido';
+                                const key = sku + "_" + nombre; 
+
+                                if (!statsByProduct[key]) {
+                                    statsByProduct[key] = { sku: sku, nombre: nombre, totalDias: 0, totalHoras: 0, count: 0 };
+                                }
+                                statsByProduct[key].totalDias += diffDias;
+                                statsByProduct[key].totalHoras += diffHoras;
+                                statsByProduct[key].count += 1;
+                            });
+                        }
+                    }
+                }
+            });
+
+            if (detalleOrdenes.length === 0) return this.showToast("No hay solicitudes finalizadas para medir.", "warning");
+
+            // Preparamos la hoja 1: Resumen (Promedios matemáticos)
+            const resumenData = Object.values(statsByProduct).map(p => ({
+                SKU: p.sku,
+                Producto: p.nombre,
+                'Órdenes Finalizadas': p.count,
+                'Promedio Demora (Días)': parseFloat((p.totalDias / p.count).toFixed(2)),
+                'Promedio Demora (Horas)': parseFloat((p.totalHoras / p.count).toFixed(1))
+            }));
+
+            // Ordenamos el resumen de mayor a menor demora en días
+            resumenData.sort((a, b) => b['Promedio Demora (Días)'] - a['Promedio Demora (Días)']);
+
+            // Crear el archivo Excel multi-pestaña usando la librería XLSX
+            const wb = XLSX.utils.book_new();
+            const wsResumen = XLSX.utils.json_to_sheet(resumenData);
+            const wsDetalle = XLSX.utils.json_to_sheet(detalleOrdenes);
+
+            XLSX.utils.book_append_sheet(wb, wsResumen, "Promedio_Por_Producto");
+            XLSX.utils.book_append_sheet(wb, wsDetalle, "Detalle_Por_Orden");
+            
+            XLSX.writeFile(wb, "Reporte_Tiempos_Produccion.xlsx");
+            this.showToast("Reporte de tiempos generado exitosamente", "success");
         },
 
         generatePDF: function(item) {
@@ -1054,6 +1163,17 @@ renderCatalog: function() {
                 doc.text(`Entrega Estimada: ${item.fechaEntregaEstimada}`, 125, yRight);
                 yRight += 5;
             }
+
+            // --- NUEVO: EXTRAER E INCLUIR FECHA DE ENTREGA REAL ---
+            const s = (item.estado || "").toLowerCase();
+            if (s.includes('entregado') || s.includes('terminado')) {
+                const histEntrega = (item.historial || []).slice().reverse().find(h => h.estado.toLowerCase().includes('entregado') || h.estado.toLowerCase().includes('terminado'));
+                if (histEntrega) {
+                    doc.text(`Fecha Entregado: ${this.formatDate(histEntrega.fecha)}`, 125, yRight);
+                    yRight += 5;
+                }
+            }
+            
             doc.text(`Destino: ${item.destino || 'Planta'}`, 125, yRight);
 
             // --- OBSERVACIONES GENERALES ---
@@ -1072,7 +1192,6 @@ renderCatalog: function() {
             const cleanText = (text) => {
                 if (!text) return '';
                 let cleaned = text.toString().replace(/\s+/g, ' ').trim();
-                // Parche rápido para el error de codificación del catálogo
                 cleaned = cleaned.replace(/ÿÿ/g, 'Ó');
                 return cleaned;
             };
@@ -1091,7 +1210,7 @@ renderCatalog: function() {
                     valign: 'middle'
                 }, 
                 margin: { left: 20, right: 20 }, 
-                tableWidth: 170, // <-- CANDADO: Prohíbe que la tabla sea más ancha que los márgenes
+                tableWidth: 170, 
                 columnStyles: {
                     0: { cellWidth: 35, halign: 'center' }, 
                     1: { cellWidth: 115 },                  
@@ -1129,7 +1248,7 @@ renderCatalog: function() {
                     headStyles: { fillColor: [100, 116, 139] }, 
                     styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
                     margin: { left: 20, right: 20 },
-                    tableWidth: 170, // <-- CANDADO para la segunda tabla
+                    tableWidth: 170, 
                     columnStyles: { 
                         0: { cellWidth: 30 }, 
                         1: { cellWidth: 30 }, 
